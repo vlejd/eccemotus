@@ -1,2 +1,6 @@
 *.pyc
-
+trash/*
+*.ipynb
+data/*
+events
+examples/*
