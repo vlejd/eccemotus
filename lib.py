@@ -71,7 +71,7 @@ def elastic_data_generator(client, indexes, verbose=False):
     }
 
     for i, response in enumerate(scan(client, query=query, index=indexes)):
-        if not i % 1000 and verbose:
+        if not i % 10000 and verbose:
             print("Elastic records ", i, file=sys.stderr)
 
         event = response['_source']
@@ -92,11 +92,22 @@ def get_graph_json(raw_generator, verbose=False):
     def parsed_generator(raw_generator):
         """Transform raw event generator to parsed events generator."""
         for raw_event in raw_generator:
-            yield P.ParserManager.parse(raw_event)
+            parsed =  P.ParserManager.parse(raw_event)
+            if parsed:
+              yield parsed
 
     graph_json = create_default_json(parsed_generator(raw_generator), verbose)
     return graph_json
 
+
+def get_one(client, idd, indexes):
+    from elasticsearch.helpers import scan
+    for ind in indexes:
+      try:
+        res = client.get(index=ind, id=idd)
+        print (P.ParserManager.parse(res['_source']))
+      except:
+        print("nope")
 
 if __name__ == "__main__":
     #TODO make a command line tool out of this
@@ -112,6 +123,10 @@ if __name__ == "__main__":
         "c4f5c5da75534ba0b4f4d73871bd6e1c",
         "ee8a1660b6b644f6998a5054532389d0",
     ]
+
+    if len(sys.argv) == 4:
+      get_one(get_client(sys.argv[1], sys.argv[2]), sys.argv[3], my_indexes)
+      sys.exit(1)
 
     #generator = file_data_generator(sys.argv[1], True)
     generator = elastic_data_generator(

@@ -101,45 +101,15 @@ class Graph():
                              "timestamp": timestamp})],
             })
 
-    def add_data(self, event, rules):
-        """ Processes one parsed event and encodes it to edges and nodes.
-
-        Encoding is based on simple rules. (source, target, edge_type).
-        source and target are almost (prefix "source:"/"target:" must be
-        removed) types of new nodes. They are also keys to event dictionary
-        which provides value for a given node.
-        """
-
-        for rule in rules:
-            # Removing target:/source: prefix
-            source_type = rule[0].split(":")[1]
-            source_value = event.get(rule[0])
-
-            target_type = rule[1].split(":")[1]
-            target_value = event.get(rule[1])
-            if not (source_value and target_value):
-                continue
-
-            source_id = self.get_add_node(source_type, source_value)
-            target_id = self.get_add_node(target_type, target_value)
-            self.add_edge(source_id, target_id, rule[2], event[P.TIMESTAMP],
-                          event[P.EVENT_ID])
-
-    def minimal_serialize(self):
-        """Serialized only required information for visualization."""
-        return {"nodes": self.nodes, "links": self.edges}
-
-
-def create_default_graph(data, verbose=False):
-    """Uses data with set of predefined rules to create a graph. """
     EDGE_HAS = "has"
     EDGE_IS = "is"
     EDGE_ACCEESS = "access"
-    rules = [
+    SIMPLE_RULES = [
         (P.SOURCE_MACHINE_IP, P.SOURCE_MACHINE_NAME, EDGE_IS),
         (P.SOURCE_USER_NAME, P.SOURCE_USER_ID, EDGE_IS),
         (P.TARGET_MACHINE_NAME, P.TARGET_MACHINE_IP, EDGE_IS),
         (P.TARGET_USER_NAME, P.TARGET_USER_ID, EDGE_IS),
+
         (P.SOURCE_MACHINE_IP, P.SOURCE_USER_NAME, EDGE_HAS),
         (P.SOURCE_MACHINE_IP, P.SOURCE_USER_ID, EDGE_HAS),
         (P.SOURCE_MACHINE_NAME, P.SOURCE_USER_NAME, EDGE_HAS),
@@ -150,18 +120,82 @@ def create_default_graph(data, verbose=False):
         (P.TARGET_MACHINE_NAME, P.TARGET_USER_ID, EDGE_HAS),
 
         #(P.TARGET_PLASO, P.TARGET_MACHINE_NAME, EDGE_IS),
-        (P.SOURCE_MACHINE_IP, P.TARGET_MACHINE_IP, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_IP, P.TARGET_MACHINE_NAME, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_IP, P.TARGET_USER_NAME, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_IP, P.TARGET_USER_ID, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_NAME, P.TARGET_MACHINE_IP, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_NAME, P.TARGET_MACHINE_NAME, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_NAME, P.TARGET_USER_NAME, EDGE_ACCEESS),
-        (P.SOURCE_MACHINE_NAME, P.TARGET_USER_ID, EDGE_ACCEESS)
     ]
+
+
+
+    def get_ssh_source(self, event):
+      # List of things that should be used as ssh source in decreasing priority.
+      SSH_SOURCE = [P.SOURCE_USER_NAME, P.SOURCE_USER_ID, P.SOURCE_MACHINE_NAME,
+                    P.SOURCE_MACHINE_IP, P.SOURCE_PLASO]
+      for key in SSH_SOURCE:
+          if key in event:
+            return key, event[key]
+      return None, None
+
+    def get_ssh_target(self, event):
+      # List of things that should be used as ssh target in decreasing priority.
+      SSH_TARGET = [P.TARGET_USER_NAME, P.TARGET_USER_ID, P.TARGET_MACHINE_NAME,
+                    P.TARGET_MACHINE_IP, P.TARGET_PLASO]
+      for key in SSH_TARGET:
+          if key in event:
+            return key, event[key]
+      return None, None
+
+    def add_data(self, source_type, source_value, target_type, target_value,
+                 edge_type, event_time, event_id):
+
+        source_id = self.get_add_node(P.get_type(source_type), source_value)
+        target_id = self.get_add_node(P.get_type(target_type), target_value)
+        self.add_edge(source_id, target_id, edge_type, event_time,
+                      event_id)
+
+
+
+    def add_event(self, event):
+        """ Processes one parsed event and encodes it to edges and nodes.
+
+        Encoding is based on simple rules. (source, target, edge_type).
+        source and target are almost (prefix "source:"/"target:" must be
+        removed) types of new nodes. They are also keys to event dictionary
+        which provides value for a given node.
+        """
+
+        #Simple rules for ownership and identity
+        for rule in self.__class__.SIMPLE_RULES:
+            # Removing target:/source: prefix
+            source_value = event.get(rule[0])
+
+            target_value = event.get(rule[1])
+            if not (source_value and target_value):
+                continue
+
+            self.add_data(rule[0], source_value, rule[1], target_value, rule[2],
+              event[P.TIMESTAMP], event[P.EVENT_ID])
+
+        #Rules for access edge
+
+        ssh_source_type, ssh_source_value = self.get_ssh_source(event)
+        ssh_target_type, ssh_target_value = self.get_ssh_target(event)
+        if ssh_source_value and ssh_target_value:
+            self.add_data(ssh_source_type, ssh_source_value, ssh_target_type,
+              ssh_target_value, self.__class__.EDGE_ACCEESS, event[P.TIMESTAMP],
+              event[P.EVENT_ID])
+
+
+
+
+    def merge(self):
+      pass
+    def minimal_serialize(self):
+        """Serialized only required information for visualization."""
+        return {"nodes": self.nodes, "links": self.edges}
+
+
+def create_default_graph(data, verbose=False):
     graph = Graph()
     for i, event in enumerate(data):
-        graph.add_data(event, rules)
+        graph.add_event(event)
         if not i % 1000 and verbose:
             print(
                 "Nodes:%d Edges: %d" % (len(graph.nodes), len(graph.edges)),
