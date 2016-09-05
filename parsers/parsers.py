@@ -8,14 +8,13 @@ in context of lateral movement.
 import re
 import sys
 
-
 # Canonical names for interesting information.
 EVENT_ID = 'event_id'
 TIMESTAMP = 'timestamp'
 
 SOURCE_MACHINE_IP = 'source:ip'
 SOURCE_MACHINE_NAME = 'source:machine_name'
-SOURCE_PLASO = 'target:plaso'
+SOURCE_PLASO = 'source:plaso'
 SOURCE_USER_ID = 'source:user_id'
 SOURCE_USER_NAME = 'source:user_name'
 
@@ -36,12 +35,14 @@ for prefix in ['source', 'target']:
     for key in BASIC_BLACK_LIST.keys():
         BLACK_LIST[prefix + ':' + key] = BASIC_BLACK_LIST[key]
 
-
 # TODO add class for mac:asl:event   probably certificates
 # TODO write description for these Data types
 # TODO inheritance
 # TODO do you want to add ip 127.0.0.1 and ::1 for ssh login?
 # TODO windows sharing logs
+
+def get_type(information):
+  return information.split(":")[1]
 
 
 class ParserManager():
@@ -99,14 +100,16 @@ class ParserManager():
         raw_data_type = event.get('data_type')
         data_type = None
 
-        if isinstance(raw_data_type, str) or isinstance(raw_data_type, unicode):
+        if isinstance(raw_data_type, basestring):
             data_type = raw_data_type
         elif isinstance(raw_data_type, dict):
             data_type = raw_data_type.get('stream')
         else:
             print(event)
-            print('what is this? This should not happen.',
-                  raw_data_type, file=sys.stderr)
+            print(
+                'what is this? This should not happen.',
+                raw_data_type,
+                file=sys.stderr)
             return {}
 
         if data_type in cls._parser_clases:
@@ -116,17 +119,28 @@ class ParserManager():
                 if parsed[key] in BLACK_LIST.get(key, []):
                     del parsed[key]
 
+            if not parsed:
+                return {}
+
+            parsed['data_type'] = event['data_type']
             target_id = first_true([
-                parsed.get(TARGET_MACHINE_IP), parsed.get(TARGET_MACHINE_NAME),
-                parsed.get(TARGET_PLASO)
+                parsed.get(TARGET_MACHINE_NAME), parsed.get(TARGET_MACHINE_IP),
+                parsed.get(TARGET_PLASO), "UNKNOWN"
             ])
 
-            for key in TARGET_USER_NAME, TARGET_USER_ID:
+            for key in [TARGET_USER_NAME, TARGET_USER_ID]:
                 if key in parsed:
                     parsed[key] = parsed[key] + '@' + target_id
 
-            if not parsed:
-                return {}
+            source_id = first_true([
+                parsed.get(SOURCE_MACHINE_NAME), parsed.get(SOURCE_MACHINE_IP),
+                parsed.get(SOURCE_PLASO), "UNKNOWN"
+            ])
+
+            for key in [SOURCE_USER_NAME, SOURCE_USER_ID]:
+                if key in parsed:
+                    parsed[key] = parsed[key] + '@' + source_id
+
 
             parsed[TIMESTAMP] = event.get(TIMESTAMP)
             parsed[EVENT_ID] = event.get('timesketch_id',
@@ -154,7 +168,7 @@ def get_plaso_filename(event):
     The file is more readable in visualization (because of trimming long names).
     """
     spec = event.get('pathspec', {})
-    if isinstance(spec, str) or isinstance(spec, unicode):
+    if isinstance(spec, basestring):
         """This is needed if data some from elasticsearch. Because it likes to
         cast things to strings.
         """
@@ -166,8 +180,8 @@ def get_plaso_filename(event):
     return t_location
 
 
-
 """Classes for ssh and other forms of 'machine jumping' parsers"""
+
 
 class LinuxUtmpEventParser():
     """Parser for linux:utm:event data_type. For example see tests.py."""
@@ -183,7 +197,7 @@ class LinuxUtmpEventParser():
         ip_address = event.get('ip_address', {})
         if isinstance(ip_address, dict):
             data[SOURCE_MACHINE_IP] = ip_address.get('stream')
-        elif isinstance(ip_address, str):
+        elif isinstance(ip_address, basestring):
             data[SOURCE_MACHINE_IP] = ip_address
 
         data[SOURCE_MACHINE_NAME] = event.get('computer_name')
@@ -204,43 +218,44 @@ class WinEvtxEventParser():
         # wha is 4675? sids were filtered?!
         # what is 1149
         # 4634 is logout - not interesting, but could be
-        # TODO triplecheck this
+        # 4769 kerberos ticket: machine-userid-username
         data = {}
-        data[TARGET_PLASO] = get_plaso_filename(event)
         event_id = event.get('event_identifier')
         strings = event['strings']
         if not isinstance(strings, list):
             strings = eval(strings)
 
         if event_id == 4624:  # An account was successfully logged on
+            data[SOURCE_PLASO] = get_plaso_filename(event)
+            data[SOURCE_MACHINE_NAME] = event['computer_name']
             field_mapper = {
-                SOURCE_USER_ID:0,
-                SOURCE_USER_NAME:1,
-                SOURCE_MACHINE_IP:18,
-                TARGET_USER_ID:4,
-                TARGET_MACHINE_NAME:11,
+                SOURCE_USER_ID: 0,
+                SOURCE_USER_NAME: 1,
+                TARGET_USER_ID: 4,
+                TARGET_USER_NAME: 5,
+                TARGET_MACHINE_NAME: 11,
+                TARGET_MACHINE_IP: 18,
             }
             for field_name, field_index in field_mapper.items():
                 data[field_name] = strings[field_index]
-            data[TARGET_MACHINE_NAME] = event['computer_name']
             return data
 
         elif event_id == 4648:  # login with certificate
             field_mapper = {
-                SOURCE_MACHINE_IP: 12,
-                SOURCE_MACHINE_NAME: 2,
                 SOURCE_USER_ID: 0,
                 SOURCE_USER_NAME: 1,
                 TARGET_USER_NAME: 5,
+                TARGET_MACHINE_NAME: 8,
+                TARGET_MACHINE_IP: 12,
             }
 
             for field_name, field_index in field_mapper.items():
                 data[field_name] = strings[field_index]
-            data[SOURCE_USER_NAME] = event['computer_name']
+            data[SOURCE_MACHINE_NAME] = event['computer_name']
             return data
 
         else:
-            return {}  # TODO
+            return {}
 
 
 ParserManager.register_parser(WinEvtxEventParser)

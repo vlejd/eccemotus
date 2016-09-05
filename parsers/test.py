@@ -13,7 +13,6 @@ class ParserManagerTest(unittest.TestCase):
     def _test_parser(self, expected_result, event):
         """Generic checks for testing a parser."""
         parsed_event = P.ParserManager.parse(event)
-
         for key, value in expected_result.items():
             self.assertIn(key, parsed_event)
             self.assertEqual(parsed_event[key], value, 'for key=%s' % key)
@@ -33,16 +32,17 @@ class ParserManagerTest(unittest.TestCase):
 
     def test_win_evtx(self):
         """Test parser for windows:evtx:record data_type."""
-        expected = {}  # TODO
-        """
         expected = {
+            P.SOURCE_MACHINE_NAME: 'REGISTRAR.internal.greendale.edu',
+            P.SOURCE_USER_ID: 'S-1-0-0@REGISTRAR.internal.greendale.edu',
+            P.SOURCE_PLASO: 'registrar.dd/greendale_images/media/',
+
+            P.TARGET_MACHINE_NAME: 'STUDENT-PC1',
             P.TARGET_MACHINE_IP: '192.168.1.11',
-            P.SOURCE_MACHINE_NAME: 'STUDENT-PC1',
-            P.SOURCE_USER_ID: 'S-1-0-0',
-            P.TARGET_USER_ID: 'S-1-5-7',
-            P.TARGET_MACHINE_NAME: 'REGISTRAR.internal.greendale.edu',
-            P.TARGET_PLASO:'registrar.dd/greendale_images/media/',
-        }"""
+            P.TARGET_USER_ID: 'S-1-5-7@STUDENT-PC1',
+            P.TARGET_USER_NAME: 'ANONYMOUS LOGON@STUDENT-PC1',
+            P.TIMESTAMP: 1440409600617570,
+        }
         self._test_parser(expected, self._win_evtx_event)
 
     def test_bsm(self):
