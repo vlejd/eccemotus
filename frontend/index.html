@@ -4,7 +4,7 @@
 
 <script src="jquery-3.1.0.min.js"></script>
 <script src="https://d3js.org/d3.v4.min.js"></script>
-<script src="../graph.json"></script>
+<script src="../out.js"></script>
 </head>
 
 <body>
@@ -20,10 +20,36 @@ graph.nodes.forEach(function(d){
 
 
 var svg = d3.select("svg");
+var holder = svg.append("g");
+var font_size = 15;
 
-var width = +svg.attr("width"),
-    height = +svg.attr("height");
 
+var width =+ svg.attr("width"),
+    height =+ svg.attr("height");
+
+svg.append('svg:defs').append('svg:marker')
+    .attr('id', 'mid-arrow')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', -10)
+    .attr('markerWidth', 3)
+    .attr('markerHeight', 3)
+    .attr('orient', 'auto')
+  .append('svg:path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', '#000');
+
+svg.call(d3.zoom()
+    .scaleExtent([1 / 5, 20])
+    .on("zoom", zoomed));
+
+function zoomed() {
+  holder.attr("transform", d3.event.transform);
+  nodelabels.style("font-size", font_size/d3.event.transform.k);
+  edgelabels.style("font-size", font_size/d3.event.transform.k);
+  nodes.attr("width", function(d){return d.width/d3.event.transform.k});
+  nodes.attr("height", function(d){return d.height/d3.event.transform.k});
+
+}
 
 
 function node_color(node){
@@ -43,9 +69,9 @@ function node_color(node){
 
 function link_distance(link){
   var maper = {
-    "has":20,
-    "is":5,
-    "access":100,
+    "has":50,
+    "is":100,
+    "access":300,
   }
   if(link.type in maper){
     return maper[link.type];
@@ -54,6 +80,22 @@ function link_distance(link){
     return 200;
   }
 }
+function link_strength(link){
+  var maper = {
+    "has":0.1,
+    "is":10,
+    "access":0.010,
+  }
+  return 1;
+  if(link.type in maper){
+    return maper[link.type];
+  }
+  else{
+    return 0.1;
+  }
+}
+
+
  function link_color(link){
   var maper = {
     "is":d3.color("red"),
@@ -72,27 +114,49 @@ function link_distance(link){
 var simulation = d3.forceSimulation()
     .force("link", d3.forceLink()
                      .id(function(d) { return d.id; })
-                     .distance(function (d)  {return link_distance(d);}))
-//                     .strength(function (link){
-  //                     return link_strength(link);
-    //                  }))
+                     .distance(function (d)  {return link_distance(d);})
+                     //.strength(function (link){return link_strength(link);})
+                     )
     .force("charge", d3.forceManyBody()
-                       .strength(-150))
+                       .distanceMax(200)
+                       .strength(-500))
     .force("center", d3.forceCenter(width / 2, height / 2));
 
 
 
-var links = svg.append("g")
-      .attr("class", "links")
+
+var glinks = holder.append("g")
+    .attr("class", "links")
     .selectAll("line")
     .data(graph.links)
-    .enter().append("line")
+    .enter().append("g")
+      .attr("class","link");
+
+var links = glinks.append("line")
       .attr("stroke",link_color)
       .attr("stroke-opacity",0.5)
+      .style('marker-start', function(d){
+        return d.type=="access"? 'url(#mid-arrow)' : "" ;
+      })
       .attr("stroke-width", function(d) { return 2; })
-      .on("mouseover",function(d){console.log(d);});
+      .on("click",function(d){
+        console.log(d.events.length);
+        for (var e in d.events){
+          console.log(d.events[e]);
 
-var gnodes = svg.selectAll(".node")
+        }
+      });
+
+
+var edgelabels = glinks.append('text')
+        .text(function(d){return d.events.length;})
+        .style("opacity", 0.5)
+        .style("font-size", font_size)
+        .attr('class', 'edgelabel');
+
+var gnodes = holder.append("g")
+      .attr("class", "nodes")
+    .selectAll(".node")
     .data(graph.nodes)
     .enter().append("g")
     .attr("class", "node")
@@ -106,14 +170,21 @@ var nodes = gnodes.append("rect")
     .attr("height", function(d){return d.height;})
     .style("opacity",0.5)
     .style("fill", node_color)
-    .on("mouseover",function(d){console.log(d);});
+    .on("click",function(d){console.log(d);});
 
-var texts = gnodes.append("text")
-      .style("font-size","12px")
-      .text(function(d) { return d.value.slice(0,12); }) //todo three dots
+var nodelabels = gnodes.append("text")
+      .style("font-size", font_size)
+      .text(function(d) {
+        var text = d.value;
+
+        if(text.length <= 15){
+          return text;
+        }
+        else{
+          return text.slice(0,13)+"...";
+        }
+      }) //todo three dots
       .style("fill","black");
-//Now we are giving the SVGs co-ordinates - the force layout is generating the co-ordinates which this code is using to update the attributes of the SVG elements
-
 
 simulation
     .nodes(graph.nodes)
@@ -144,9 +215,21 @@ function ticked() {
     .attr("x", function (d) { return d.x;})
     .attr("y", function (d) { return d.y;});
 
-  texts
-    .attr("x", function (d) { return d.x;})
-    .attr("y", function (d) { return d.y+15;});
+  nodelabels
+    .attr("x", function (d) {
+      var rect_width = d3.select(this.parentNode).select("rect").attr("width");
+
+      return d.x+rect_width*0.03;
+    })
+    .attr("y", function (d) {
+      var rect_height = d3.select(this.parentNode).select("rect").attr("height");
+      return d.y+rect_height*0.85;
+    });
+
+  edgelabels
+      .attr("x",function(d) { return (d.source.x + d.target.x)/2; })
+      .attr("y",function(d) { return (d.source.y + d.target.y)/2; });
+
 
 }
 
@@ -161,11 +244,11 @@ function collide(node) {
         up =  Math.min(y1,ny1,y2,ny2),
         down =  Math.max(y1,ny1,y2,ny2);
     var xPadding = 5,
-        yPadding = 2;
+        yPadding = 5;
     var xSize = (x2-x1) + (nx2-nx1) + xPadding,
         ySize = (y2-y1) + (ny2-ny1) + yPadding;
 
-    if( right - left < xSize && down-up < ySize ){
+    if( right - left < xSize && down-up < ySize ){ //TODO redo me
       if ("data" in tree && (tree.data !== node)) {
         var point = tree.data;
         var x = node.x - point.x,

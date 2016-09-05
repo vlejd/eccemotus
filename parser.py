@@ -1,13 +1,8 @@
+from __future__ import print_function
 import json
 import os
 import parsers.parsers as P
 import sys, traceback
-
-
-def timeskech():
-  pass
-  #TODO make direct request to timesketch backend.
-  # query by data_type, then load to somewhere (database)
 
 
 def parse_line(line):
@@ -17,13 +12,10 @@ def parse_line(line):
 def parse_event(event):
   data = None
   try:
-    data = P.ParserManager.Parse(event)
+    data = P.ParserManager.parse(event)
   except Exception as e:
     print (event, file=sys.stderr)
     traceback.print_exc(file=sys.stdout)
-
-  if data:
-    data["timestamp"] = event.get("timestamp")
   return data
 
 if __name__ == "__main__":
