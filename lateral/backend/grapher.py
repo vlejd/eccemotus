@@ -184,9 +184,6 @@ class Graph():
 
 
 
-
-    def merge(self):
-      pass
     def minimal_serialize(self):
         """Serialized only required information for visualization."""
         return {"nodes": self.nodes, "links": self.edges}
@@ -204,12 +201,6 @@ def create_default_graph(data, verbose=False):
     return graph
 
 
-def create_default_json(data, verbose=False):
-    """ Directly returns json representation of graph."""
-    graph = create_default_graph(data, verbose)
-    return json.dumps(graph.minimal_serialize())
-
-
 if __name__ == "__main__":
     """Outputs a !javascript code! for graph.
 
@@ -223,10 +214,10 @@ if __name__ == "__main__":
         sys.exit(1)
 
     event_data = json.load(open(sys.argv[1]))
-    json_graph = create_default_json(event_data, verbose=True)
-
+    graph = create_default_graph(event_data, verbose=True)
+    minimal_graph = graph.minimal_serialize()
     graph_file = open(sys.argv[2], "w")
     graph_file.write("var graph =")
-    graph_file.write(json_graph)
+    json.dump(minimal_graph, graph_file)
     graph_file.write(";")
     graph_file.close()

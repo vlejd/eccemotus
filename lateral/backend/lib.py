@@ -12,11 +12,9 @@ elastic_data_generator:
   Queries elasticsearch for events that it can parse. Also no memory
   requirements. Does not need to read all logs, but must wait for elasticsearch.
 """
-from grapher import create_default_json
-from parser import parse_line
+from grapher import create_default_graph
 import parsers.parsers as P
 import sys
-
 
 def file_data_generator(filename, verbose=False):
     """Reads json_line file and yields events.
@@ -28,7 +26,7 @@ def file_data_generator(filename, verbose=False):
         if not i % 100000 and verbose:
             print("File line ", i, file=sys.stderr)
 
-        parsed = parse_line(line)
+        parsed = P.ParseManager.parse_line(line)
 
         if parsed:
             yield parsed
@@ -50,7 +48,7 @@ def elastic_data_generator(client, indexes, verbose=False):
     Uses scan function, so the data is really processed like a stream.
     """
 
-    from elasticsearch.helpers import scan
+    from elasticsearch.helpers import scan #TODO add try except
 
     # Generating term filter for data_types, that we can parse
     should = [{"term": {"data_type": data_type}}
@@ -81,14 +79,12 @@ def elastic_data_generator(client, indexes, verbose=False):
 
 def get_client(host, port):
     """ Returns elasticsearch client for given port and host address."""
-    from elasticsearch import Elasticsearch
+    from elasticsearch import Elasticsearch #TODO add try except
     client = Elasticsearch([{u'host': host, u'port': port}])
     return client
 
 
-def get_graph_json(raw_generator, verbose=False):
-    """Returns json representation for graph created based on raw_generator."""
-
+def get_graph(raw_generator, verbose=False):
     def parsed_generator(raw_generator):
         """Transform raw event generator to parsed events generator."""
         for raw_event in raw_generator:
@@ -96,12 +92,19 @@ def get_graph_json(raw_generator, verbose=False):
             if parsed:
               yield parsed
 
-    graph_json = create_default_json(parsed_generator(raw_generator), verbose)
+    graph = create_default_graph(parsed_generator(raw_generator), verbose)
+    return graph
+
+def get_graph_json(raw_generator, verbose=False):
+    """Returns json representation for graph created based on raw_generator."""
+
+    graph = get_graph(raw_generator, verbose=verbose)
+    garph_json = json.dumps(graph.minimal_serialize())
     return graph_json
 
 
 def get_one(client, idd, indexes):
-    from elasticsearch.helpers import scan
+    from elasticsearch.helpers import scan #TODO add try except
     for ind in indexes:
       try:
         res = client.get(index=ind, id=idd)
@@ -134,6 +137,6 @@ if __name__ == "__main__":
 
     graph = get_graph_json(generator, verbose=True)
     outfile = open("out.js", "w")
-    print("var graph=", file=outfile)
+    print("var _graph=", file=outfile)
     print(graph, file=outfile)
     print(";", file=outfile)

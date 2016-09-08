@@ -6,8 +6,8 @@ Just use ParserManager.parse(log) and it will return fields interesting fields
 in context of lateral movement.
 """
 import re
-import sys
-
+import sys, traceback
+import json
 # Canonical names for interesting information.
 EVENT_ID = 'event_id'
 TIMESTAMP = 'timestamp'
@@ -147,6 +147,42 @@ class ParserManager():
                                          cls.get_next_event_id())
 
             return parsed
+
+    @classmethod
+    def parse_line(cls, line):
+        """ Front-end for parse_event() that parses one line (string).
+
+        Args:
+            line: event in json_line format
+
+        Returns:
+            Dictionary of information names and values.
+
+        """
+        event = json.loads(line)
+        return cls.parse_event(event)
+
+    @classmethod
+    def parse_event(cls, event):
+        """ Front-end for parse() that does not care about exceptions.
+
+        Args:
+            line: event in json_line format
+
+        Returns:
+            Dictionary of information names and values which is empty if event
+            does not contain valuable (parseable) information.
+            None if error occurred.
+        """
+        data = None
+        try:
+            data = cls.parse(event)
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            print (event, file=sys.stderr)
+            traceback.print_exc(file=sys.stdout)
+        return data
 
 
 def first_true(values, default=None):
@@ -357,4 +393,27 @@ class SysLogSshParser():
 ParserManager.register_parser(SysLogSshParser)
 
 if __name__ == '__main__':
-    print(ParserManager.get_parsed_types())
+
+    if len(sys.argv) <= 2:
+        print("give me outfile and json_line files")
+        sys.exit()
+
+    print("Parsing:", ParserManager.get_parsed_types())
+
+    data = []
+    parsed_c = 0
+    for f_name in sys.argv[2:]:
+        print (f_name, file=sys.stderr)
+        f = open(f_name)
+        for i, line in enumerate(f):
+            parsed = ParserManager.parse_line(line)
+            if parsed:
+                parsed_c += 1
+                data.append(parsed)
+            if not i%(10**5):
+                print(i, parsed_c)
+
+    print ("outputting",file=sys.stderr)
+    f = open(sys.argv[1],"w")
+    json.dump(data,f)
+    f.close()
