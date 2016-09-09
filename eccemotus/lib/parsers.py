@@ -8,6 +8,7 @@ in context of lateral movement.
 import re
 import sys, traceback
 import json
+
 # Canonical names for interesting information.
 EVENT_ID = 'event_id'
 TIMESTAMP = 'timestamp'
@@ -114,7 +115,6 @@ class ParserManager():
 
         if data_type in cls._parser_clases:
             parsed = cls._parser_clases[data_type].parse(event)
-
             for key in parsed.keys():
                 if parsed[key] in BLACK_LIST.get(key, []):
                     del parsed[key]
@@ -257,7 +257,10 @@ class WinEvtxEventParser():
         # 4769 kerberos ticket: machine-userid-username
         data = {}
         event_id = event.get('event_identifier')
-        strings = event['strings']
+        strings = event.get('strings')
+        if not strings:
+            return {}
+
         if not isinstance(strings, list):
             strings = eval(strings)
 

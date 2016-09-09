@@ -15,7 +15,8 @@ elastic_data_generator:
 """
 from lib.grapher import create_default_graph
 import sys
-
+import json
+from lib.parsers import ParserManager
 
 def file_data_generator(filename, verbose=False):
     """Reads json_line file and yields events.
@@ -26,11 +27,7 @@ def file_data_generator(filename, verbose=False):
     for i, line in enumerate(input_file):
         if not i % 100000 and verbose:
             print("File line ", i, file=sys.stderr)
-
-        parsed = P.ParseManager.parse_line(line)
-
-        if parsed:
-            yield parsed
+        yield json.loads(line)
 
 
 def elastic_data_generator(client, indexes, verbose=False):
@@ -52,7 +49,7 @@ def elastic_data_generator(client, indexes, verbose=False):
 
     # Generating term filter for data_types, that we can parse
     should = [{"term": {"data_type": data_type}}
-              for data_type in P.ParserManager.get_parsed_types()]
+              for data_type in ParserManager.get_parsed_types()]
 
     # Elasticsearch query.
     query = {
@@ -68,14 +65,19 @@ def elastic_data_generator(client, indexes, verbose=False):
         }
     }
 
-    for i, response in enumerate(scan(client, query=query, index=indexes)):
-        if not i % 10000 and verbose:
-            print("Elastic records ", i, file=sys.stderr)
+    # this is a bug at elasticsearch.py, because it can not handle elastic errors
+    # properly. it is sad :'(
+    try: #TODO(vlejd) fix this.
+        for i, response in enumerate(scan(client, query=query, index=indexes)):
+            if not i % 10000 and verbose:
+                print("Elastic records ", i, file=sys.stderr)
 
-        event = response['_source']
-        event["timesketch_id"] = response["_id"]
-        yield event
+            event = response['_source']
+            event["timesketch_id"] = response["_id"]
+            yield event
+    except Exception as e:
 
+        return
 
 def get_client(host, port):
     """ Returns elasticsearch client for given port and host address."""
@@ -86,7 +88,9 @@ def get_client(host, port):
 def parsed_data_generator(raw_generator):
     """Transform raw event generator to parsed events generator."""
     for raw_event in raw_generator:
-        parsed =  P.ParserManager.parse(raw_event)
+        if not raw_event:
+            continue
+        parsed = ParserManager.parse(raw_event)
         if parsed:
           yield parsed
 
@@ -99,7 +103,7 @@ def get_graph_json(raw_generator, verbose=False):
     """Returns json representation for graph created based on raw_generator."""
 
     graph = get_graph(raw_generator, verbose=verbose)
-    garph_json = json.dumps(graph.minimal_serialize())
+    graph_json = json.dumps(graph.minimal_serialize())
     return graph_json
 
 
@@ -108,32 +112,42 @@ def get_one(client, idd, indexes):
     for ind in indexes:
       try:
         res = client.get(index=ind, id=idd)
-        print (P.ParserManager.parse(res['_source']))
+        print (ParserManager.parse(res['_source']))
       except:
         print("nope")
 
 if __name__ == "__main__":
     #TODO make a command line tool out of this
-    if len(sys.argv) <= 2:
-        print("ip and port")
-        sys.exit(1)
+    generator = None
+    if sys.argv[1] == "file":
+        fname = sys.argv[2]
+        print(fname)
+        generator = file_data_generator(fname, True)
 
-    #These indexes are specific for my machine!
-    my_indexes = [
-        "d7f26dc5d9084ed58de0ea22d694700c",
-        "72bd4e869139471a98a01ebf8288d4f2",
-        "60f93e5a441d49cea662ce040a76b4d1",
-        "c4f5c5da75534ba0b4f4d73871bd6e1c",
-        "ee8a1660b6b644f6998a5054532389d0",
-    ]
+    elif sys.argv[1] == "el":
 
-    if len(sys.argv) == 4:
-      get_one(get_client(sys.argv[1], sys.argv[2]), sys.argv[3], my_indexes)
-      sys.exit(1)
+        if len(sys.argv) < 4:
+            print("ip and port")
+            sys.exit(1)
 
-    #generator = file_data_generator(sys.argv[1], True)
-    generator = elastic_data_generator(
-        get_client(sys.argv[1], sys.argv[2]), my_indexes, True)
+        ip = sys.argv[2]
+        port = sys.argv[3]
+        #These indexes are specific for my machine!
+        my_indexes = [
+            "d7f26dc5d9084ed58de0ea22d694700c",
+            "72bd4e869139471a98a01ebf8288d4f2",
+            "60f93e5a441d49cea662ce040a76b4d1",
+            "c4f5c5da75534ba0b4f4d73871bd6e1c",
+            "ee8a1660b6b644f6998a5054532389d0",
+        ]
+        generator = elastic_data_generator(
+            get_client(ip, port), my_indexes, True)
+
+        if len(sys.argv) == 5:
+          idd = sys.argv[4]
+          get_one(get_client(ip, port), idd, my_indexes)
+          sys.exit(1)
+
 
     graph = get_graph_json(generator, verbose=True)
     outfile = open("out.js", "w")
