@@ -1,6 +1,7 @@
 from __future__ import print_function
 """Front-end for working with lateral graph.
 
+This can be used as a command line tool and as a library as well.
 First step is to create a data generator, file_data_generator or
 elastic_data_generator, depending of where you want to get plaso events from.
 
@@ -12,9 +13,9 @@ elastic_data_generator:
   Queries elasticsearch for events that it can parse. Also no memory
   requirements. Does not need to read all logs, but must wait for elasticsearch.
 """
-from grapher import create_default_graph
-import parsers.parsers as P
+from lib.grapher import create_default_graph
 import sys
+
 
 def file_data_generator(filename, verbose=False):
     """Reads json_line file and yields events.
@@ -47,7 +48,6 @@ def elastic_data_generator(client, indexes, verbose=False):
 
     Uses scan function, so the data is really processed like a stream.
     """
-
     from elasticsearch.helpers import scan #TODO add try except
 
     # Generating term filter for data_types, that we can parse
@@ -83,16 +83,16 @@ def get_client(host, port):
     client = Elasticsearch([{u'host': host, u'port': port}])
     return client
 
+def parsed_data_generator(raw_generator):
+    """Transform raw event generator to parsed events generator."""
+    for raw_event in raw_generator:
+        parsed =  P.ParserManager.parse(raw_event)
+        if parsed:
+          yield parsed
 
 def get_graph(raw_generator, verbose=False):
-    def parsed_generator(raw_generator):
-        """Transform raw event generator to parsed events generator."""
-        for raw_event in raw_generator:
-            parsed =  P.ParserManager.parse(raw_event)
-            if parsed:
-              yield parsed
-
-    graph = create_default_graph(parsed_generator(raw_generator), verbose)
+    parsed_generator = parsed_data_generator(raw_generator)
+    graph = create_default_graph(parsed_generator, verbose)
     return graph
 
 def get_graph_json(raw_generator, verbose=False):

@@ -10,8 +10,7 @@ javascript visualization.
 from collections import defaultdict as dfd
 import json
 import sys
-import parsers.parsers as P
-
+import parsers as P
 
 class Graph():
     """Very light-weighed implementation of property graph.

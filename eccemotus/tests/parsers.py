@@ -4,8 +4,8 @@ Tests for parser
 We have a few events in json format and for each we know what we are expecting.
 """
 import unittest
-import parsers as P
-
+import sys
+import lib.parsers as P
 
 class ParserManagerTest(unittest.TestCase):
     """Test ParserManager """
@@ -318,7 +318,3 @@ class ParserManagerTest(unittest.TestCase):
         'username': 'dean',
         'uuid': '090d45a7d0ad458ab1937b0982dbedf4'
     }
-
-
-if __name__ == '__main__':
-    unittest.main()
