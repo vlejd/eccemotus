@@ -396,12 +396,12 @@ class SysLogSshParser():
 ParserManager.register_parser(SysLogSshParser)
 
 if __name__ == '__main__':
+    print("Parsing:", ParserManager.get_parsed_types())
 
     if len(sys.argv) <= 2:
         print("give me outfile and json_line files")
         sys.exit()
 
-    print("Parsing:", ParserManager.get_parsed_types())
 
     data = []
     parsed_c = 0

@@ -1,80 +1,40 @@
 var LateralMap = (function() {
 
     var Map = function() {
-        this.data = 10;
     };
+    Map.prototype.set_data = function(data){
+        // Permanent copy of data.
+        this.backup_data = JSON.parse(JSON.stringify(data));
+        // Working data.
+        this.graph = JSON.parse(JSON.stringify(data));
+    }
 
-    Map.prototype.render = function(graph, element) {
-        var font_size = 15,
-            text_length = 15,
-            margin = {
-                top: 50,
-                right: 75,
-                bottom: 0,
-                left: 40
-            },
-            width = 1200,
-            highlighted = false;
-            height = 1100; //TODO redo
+    Map.prototype.reset = function(){
+        this.graph = JSON.parse(JSON.stringify(this.backup_data));
+    }
 
-        graph.nodes.forEach(function(d) {
-            d.height = 20;
-            d.width = Math.min(text_length, d.value.length) * 10 + 2;
-        });
-
-
-        d3.select(element).select('svg').remove();
-        var svg = d3.select(element).append("svg").attr("width", width)
-            .attr("height", height);
-        var holder = svg.append("g");
-
-        svg.append('svg:defs').append('svg:marker')
-            .attr('id', 'mid-arrow')
-            .attr('viewBox', '0 -5 10 10')
-            .attr('refX', -10)
-            .attr('markerWidth', 3)
-            .attr('markerHeight', 3)
-            .attr('orient', 'auto')
-            .append('svg:path')
-            .attr('d', 'M0,-5L10,0L0,5')
-            .attr('fill', '#000');
-
-        svg.call(d3.zoom()
-            .scaleExtent([1 / 5, 20])
-            .on("zoom", zoomed));
-
-        function zoomed() {
-            holder.attr("transform", d3.event.transform);
-            nodelabels.style("font-size", font_size / d3.event.transform.k);
-            edgelabels.style("font-size", font_size / d3.event.transform.k);
-            nodes.attr("width", function(d) {
-                    return d.width / d3.event.transform.k
-                    })
-                .attr("height", function(d) {
-                        return d.height / d3.event.transform.k
-                    })
-                .attr("zoom", d3.event.transform.k);
-            ticked(); //because transform is broken with text
-        }
-        simulation = d3.forceSimulation(graph.nodes).on("tick", ticked)
-            .force("link", d3.forceLink(graph.links)
+    Map.prototype.set_forces = function(){
+        var _this =  this;
+        this.simulation = d3.forceSimulation(this.graph.nodes).on("tick", function(){_this.tick();})
+            .force("link", d3.forceLink(this.graph.links)
                 .id(function(d) {
                     return d.id;
                 })
-                //.distance(function(d) {
-                //    return link_distance(d);
-                //})
                 .strength(function(d) {
                     return link_strength(d);
                 })
             )
             .force("charge", d3.forceManyBody()
-                .distanceMax(1000)
+                .distanceMax(300)
                 .strength(-200))
-            .force("centering", d3.forceCenter(width / 2, height / 2))
-            .force("circular", circular(width / 2, height / 2, 400));
+            .force("centering", d3.forceCenter(this.width / 2, this.height / 2))
+            .force("circular", circular(this.width / 2, this.height / 2, 400)).stop();
+    }
 
-        var glinks = holder.append("g")
+    Map.prototype.set_elements = function(){
+        var _this = this;
+        this.holder.selectAll("*").remove();
+        this.glinks = this.holder.append("g")
             .attr("class", "links")
             .selectAll("line")
             .data(graph.links)
@@ -82,7 +42,7 @@ var LateralMap = (function() {
             .attr("class", "link")
             .attr("id", function(d){return "glink_"+d.index;});
 
-        var links = glinks.append("line")
+                this.links = this.glinks.append("line")
             .attr("stroke", link_color)
             .attr("stroke-opacity", 0.5)
             .style('marker-start', function(d) {
@@ -100,15 +60,15 @@ var LateralMap = (function() {
             });
 
 
-        var edgelabels = glinks.append('text')
+        this.edgelabels = this.glinks.append('text')
             .text(function(d) {
                 return d.events.length;
             })
             .style("opacity", 0.5)
-            .style("font-size", font_size)
+            .style("font-size", _this.vars.font_size)
             .attr('class', 'edgelabel');
 
-        var gnodes = holder.append("g")
+        this.gnodes = this.holder.append("g")
             .attr("class", "nodes")
             .selectAll(".node")
             .data(graph.nodes)
@@ -121,7 +81,25 @@ var LateralMap = (function() {
                 .on("drag", dragged)
                 .on("end", dragended));
 
-        var nodes = gnodes.append("rect")
+        function dragstarted(d) {
+            if (!d3.event.active) _this.simulation.alphaTarget(0.01).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+
+        function dragged(d) {
+            d.fx = d3.event.x;
+            d.fy = d3.event.y;
+        }
+
+        function dragended(d) {
+            if (!d3.event.active) _this.simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+        }
+
+
+        this.nodes = this.gnodes.append("rect")
             .attr("width", function(d) {
                 return d.width;
             }) //TODO getComputedTextLength()
@@ -132,13 +110,13 @@ var LateralMap = (function() {
             .style("fill", node_color)
 
             .on("click", function(d) {
-                if (highlighted){
-                    reset();
+                if (_this.vars.highlighted){
+                    _this.reset_opacity();
                 }
                 else{
-                    var set = has_is_dfs(d);
+                    var set = _this.has_is_dfs(d);
 
-                    glinks.style("opacity", 0.1);
+                    _this.glinks.style("opacity", 0.1);
                     graph.links.forEach(function(d){
                         var glink = d3.select("#glink_"+d.index);
                         if(set.has(d.source.id) || set.has(d.target.id)){
@@ -146,13 +124,13 @@ var LateralMap = (function() {
                         }
                     });
 
-                    gnodes.style("opacity",0.1);
-                    select_by_id(nodes, set).each(function(d){
+                    _this.gnodes.style("opacity",0.1);
+                    _this.select_by_id(_this.nodes, set).each(function(d){
                         d3.select(this.parentNode).style("opacity",1);
                     });
 
-                    var sshset = access_dfs(set);
-                    select_by_id(nodes, sshset).each(function(d){
+                    var sshset = _this.access_dfs(set);
+                    _this.select_by_id(_this.nodes, sshset).each(function(d){
                         d3.select(this)
                             .style("stroke", "black")
                             .style("stroke-width", 1)
@@ -162,7 +140,7 @@ var LateralMap = (function() {
 
 
                 }
-                highlighted =! highlighted;
+                _this.vars.highlighted =! _this.vars.highlighted;
 
             })
             .on("mouseover", function(d){
@@ -180,28 +158,197 @@ var LateralMap = (function() {
             })
 
             ;
-        var nodelabels = gnodes.append("text")
-            .style("font-size", font_size)
+        this.nodelabels = this.gnodes.append("text")
+            .style("font-size", _this.vars.font_size)
             .style("font-family","monospace")
             .style("pointer-events", "none")
             .text(function(d) {
                 var text = d.value;
 
-                if (text.length <= text_length) {
+                if (text.length <= _this.vars.text_length) {
                     return text;
                 } else {
-                    return text.slice(0, text_length-3) + "...";
+                    return text.slice(0, _this.vars.text_length-3) + "...";
                 }
             })
             .style("fill", "black");
-        function reset(){
-            nodes.style("stroke-width", 0)
-            glinks.style("opacity", 1);
-            gnodes.style("opacity",1);
+    }
+
+
+    Map.prototype.filter_events = function(from_time, to_time){
+        var new_links = new Array();
+        var _this = this;
+        console.log(this);
+        this.graph.links.forEach(function(d){
+            var new_events = new Array();
+            d.events.forEach(function(e){
+                if(e.timestamp >= from_time && e.timestamp <= to_time){
+                    new_events.push(e);
+                }
+            });
+
+            if(new_events.length>0){
+                d.events = new_events;
+                new_links.push(d);
+            }
+        });
+        this.graph.links = new_links;
+        console.log(this);
+        console.log(this.graph.links);
+
+    }
+
+    Map.prototype.render = function(data, element) {
+        this.vars={
+            font_size: 15,
+            text_length: 15,
+            margin: {
+                top: 50,
+                right: 75,
+                bottom: 0,
+                left: 40
+            },
+            highlighted: false
+            }; //TODO redo
+        var _this = this;
+        this.height = 1100;
+        this.width = 1200;
+        this.simulation;
+        this.element = element;
+
+        this.set_data(data);
+        this.set_forces();
+
+        graph = this.graph;
+        graph.nodes.forEach(function(d) {
+            d.height = 20;
+
+            d.width = Math.min(_this.vars.text_length, d.value.length) * 10 + 2;
+        });
+        this.button = d3.select(element).append("div").append("button").append("p").text("sss");
+        d3.select(element).select('svg').remove();
+        this.svg = d3.select(element).append("svg").attr("width", _this.width)
+            .attr("height", _this.height);
+
+        this.button.on("click", function(){
+                _this.filter_events(1441480346079210, 1441480346399210);
+                _this.set_forces();
+                _this.set_elements();
+                _this.zoomed();
+                _this.simulation.alphaTarget(0.01).restart();
+
+            });
+
+        this.holder = this.svg.append("g");
+
+        this.svg.append('svg:defs').append('svg:marker')
+            .attr('id', 'mid-arrow')
+            .attr('viewBox', '0 -5 10 10')
+            .attr('refX', -10)
+            .attr('markerWidth', 3)
+            .attr('markerHeight', 3)
+            .attr('orient', 'auto')
+            .append('svg:path')
+            .attr('d', 'M0,-5L10,0L0,5')
+            .attr('fill', '#000');
+
+        this.svg.call( d3.zoom()
+            .scaleExtent([1 / 5, 20])
+            .on("zoom", function(){
+                _this.transform = d3.event.transform;
+                _this.zoomed()
+            }));
+
+
+        this.set_elements();
+
+        this.simulation.restart();
+
+        this.G = new Array(graph.nodes.length);
+        for (var i = 0; i < graph.nodes.length; i++) {
+            this.G[i] = new Array();
         }
-        function ticked() {
+        for (var i = 0; i<graph.links.length; i++){
+            var link = graph.links[i];
+            this.G[link.source.id].push(link);
+            this.G[link.target.id].push(link);
+        }
+    };
+    Map.prototype.select_by_id = function(selection, id_set){
+        return selection.filter( function(d){ return id_set.has(d.id);} );
+    }
+
+    Map.prototype.reset_opacity = function(){
+        this.nodes.style("stroke-width", 0)
+        this.glinks.style("opacity", 1);
+        this.gnodes.style("opacity",1);
+    }
+
+    Map.prototype.zoomed = function() {
+        var _this = this;
+        if (typeof _this.transform == 'undefined') return;
+        _this.holder.attr("transform", _this.transform);
+        _this.nodelabels.style("font-size", _this.vars.font_size / _this.transform.k);
+        _this.edgelabels.style("font-size", _this.vars.font_size / _this.transform.k);
+        _this.nodes.attr("width", function(d) {
+                return d.width / _this.transform.k
+                })
+            .attr("height", function(d) {
+                    return d.height / _this.transform.k
+                })
+            .attr("zoom", _this.transform.k);
+        //TODO ticked(); //because transform is broken with text
+    }
+
+    Map.prototype.has_is_dfs = function(d){
+        var _this = this;
+        var done = new Set();
+        var edge_types = ["has","is"]
+        var dfs = function(node){
+            if (done.has(node)) return;
+            done.add(node);
+            for (var i=0; i< _this.G[node].length; i++){
+                var link = _this.G[node][i];
+                if(edge_types.indexOf(link.type)!==-1){
+                    dfs(link.source.id);
+                    dfs(link.target.id);
+                }
+            }
+        }
+        if(d instanceof Array){
+            for(var i=0; i< d.length ; i++){
+                dfs(d[i].id);
+            }
+        }
+        else{
+            dfs(d.id);
+        }
+        return done;
+    }
+
+    Map.prototype.access_dfs = function(d){
+        var done = new Set();
+        var _d = d;
+        d = Array.from(d);
+        for(var i=0; i<d.length ; i++){
+            for(var j=0; j< this.G[d[i]].length; j++){
+                var link = this.G[d[i]][j];
+
+                if(link.type == "access"){
+                    done.add(link.source.id);
+                    done.add(link.target.id);
+                }
+            }
+        }
+        for(var i=0; i<d.length ; i++){
+            done.delete(d[i]);
+        }
+        return done;
+    }
+
+    Map.prototype.tick = function() {
             var i = 0,
-                n = graph.nodes.length;
+                n = this.graph.nodes.length;
             var q = d3.quadtree()
                 .x(function(d) {
                     return d.x;
@@ -209,16 +356,14 @@ var LateralMap = (function() {
                 .y(function(d) {
                     return d.y;
                 })
-                .addAll(graph.nodes);
+                .addAll(this.graph.nodes);
             while (++i < n) {
-                q.visit(collide(graph.nodes[i]));
+                q.visit(collide(this.graph.nodes[i]));
             }
 
             //moving
-            links
-                .attr("x1", function(d) {
-                    return d.source.x;
-                })
+            this.links
+                .attr("x1", function(d) { return d.source.x; })
                 .attr("y1", function(d) {
                     return d.source.y;
                 })
@@ -228,14 +373,14 @@ var LateralMap = (function() {
                 .attr("y2", function(d) {
                     return d.target.y;
                 });
-            nodes
+            this.nodes
                 .attr("x", function(d) {
                     return d.x;
                 })
                 .attr("y", function(d) {
                     return d.y;
                 });
-            nodelabels
+            this.nodelabels
                 .attr("x", function(d) {
                     var rect_width = d3.select(this.parentNode).select("rect").attr("width");
 
@@ -245,7 +390,7 @@ var LateralMap = (function() {
                     var rect_height = d3.select(this.parentNode).select("rect").attr("height");
                     return d.y + rect_height * 0.85;
                 });
-            edgelabels
+            this.edgelabels
                 .attr("x", function(d) {
                     return (d.source.x + d.target.x) / 2;
                 })
@@ -255,83 +400,8 @@ var LateralMap = (function() {
 
             //inheriting opacity
             //glinks.style("opacity", function(d){console.log(d); return 1;});
+    }
 
-        }
-
-        function dragstarted(d) {
-            if (!d3.event.active) simulation.alphaTarget(0.01).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-        }
-
-        function dragged(d) {
-            d.fx = d3.event.x;
-            d.fy = d3.event.y;
-        }
-
-        function dragended(d) {
-            if (!d3.event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-        }
-        function select_by_id(selection, id_set){
-            return selection.filter( function(d){ return id_set.has(d.id);} );
-        }
-        var G = new Array(graph.nodes.length);
-        for (var i = 0; i < graph.nodes.length; i++) {
-            G[i] = new Array();
-        }
-        for (var i = 0; i<graph.links.length; i++){
-            var link = graph.links[i];
-            G[link.source.id].push(link);
-            G[link.target.id].push(link);
-        }
-        function has_is_dfs(d){
-            var done = new Set();
-            var edge_types = ["has","is"]
-            var dfs = function(node){
-                if (done.has(node)) return;
-                done.add(node);
-                for (var i=0; i< G[node].length; i++){
-                    var link = G[node][i];
-                    if(edge_types.indexOf(link.type)!==-1){
-                        dfs(link.source.id);
-                        dfs(link.target.id);
-                    }
-                }
-            }
-            if(d instanceof Array){
-                for(var i=0; i< d.length ; i++){
-                    dfs(d[i].id);
-                }
-            }
-            else{
-                dfs(d.id);
-            }
-            return done;
-        }
-
-        function access_dfs(d){
-            var done = new Set();
-            var _d = d;
-            d = Array.from(d);
-            for(var i=0; i<d.length ; i++){
-                for(var j=0; j< G[d[i]].length; j++){
-                    var link = G[d[i]][j];
-
-                    if(link.type == "access"){
-                        done.add(link.source.id);
-                        done.add(link.target.id);
-                    }
-                }
-            }
-            for(var i=0; i<d.length ; i++){
-                done.delete(d[i]);
-            }
-            return done;
-        }
-
-    };
 
     function collide(node) {
         return function(tree, x1, y1, x2, y2) {
@@ -444,26 +514,12 @@ var LateralMap = (function() {
         }
     }
 
-    function link_distance(link) {
-        var maper = {
-            "has": 10,
-            "is": 10,
-            "access": 500,
-        }
-        if (link.type in maper) {
-            return maper[link.type];
-        } else {
-            return 200;
-        }
-    }
-
     function link_strength(link) {
         var maper = {
             "has": 1,
             "is": 1,
             "access": 0.1,
         }
-        console.log(maper[link.type]);
         return maper[link.type];
         if (link.type in maper) {
             return maper[link.type];
