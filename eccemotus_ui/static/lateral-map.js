@@ -102,7 +102,7 @@ var LateralMap = (function() {
         this.nodes = this.gnodes.append("rect")
             .attr("width", function(d) {
                 return d.width;
-            }) //TODO getComputedTextLength()
+            })
             .attr("height", function(d) {
                 return d.height;
             })
@@ -178,7 +178,6 @@ var LateralMap = (function() {
     Map.prototype.filter_events = function(from_time, to_time){
         var new_links = new Array();
         var _this = this;
-        console.log(this);
         this.graph.links.forEach(function(d){
             var new_events = new Array();
             d.events.forEach(function(e){
@@ -193,15 +192,22 @@ var LateralMap = (function() {
             }
         });
         this.graph.links = new_links;
-        console.log(this);
-        console.log(this.graph.links);
 
     }
+    Map.prototype.set_filter = function(from_time, to_time){
+        var _this = this;
+        _this.filter_events(from_time, to_time);
+        _this.set_forces();
+        _this.set_elements();
+        _this.zoomed();
+        _this.simulation.alphaTarget(0.01).restart();
+    }
+
 
     Map.prototype.render = function(data, element) {
         this.vars={
             font_size: 15,
-            text_length: 15,
+            text_length: 20,
             margin: {
                 top: 50,
                 right: 75,
@@ -209,7 +215,7 @@ var LateralMap = (function() {
                 left: 40
             },
             highlighted: false
-            }; //TODO redo
+            };
         var _this = this;
         this.height = 1100;
         this.width = 1200;
@@ -220,24 +226,46 @@ var LateralMap = (function() {
         this.set_forces();
 
         graph = this.graph;
+        var min_timestamp = 2439118792937500;
+        var max_timestamp = 0;
+
+        graph.links.forEach(function(link){
+            link.events.forEach(function(e){
+                min_timestamp = Math.min(min_timestamp, e.timestamp);
+                max_timestamp = Math.max(max_timestamp, e.timestamp);
+            })
+        })
+
         graph.nodes.forEach(function(d) {
             d.height = 20;
-
             d.width = Math.min(_this.vars.text_length, d.value.length) * 10 + 2;
         });
-        this.button = d3.select(element).append("div").append("button").append("p").text("sss");
+
+        this.timeline_holder = d3.select(element).append('p');
+
+        this.timeline_holder.append("input").attr("type", "number")
+                                            .attr("id", "from_time")
+                                            .attr("step", 60)
+                                            .attr("value", min_timestamp);
+
+        this.timeline_holder.append("input").attr("type", "number")
+                                            .attr("id", "to_time")
+                                            .attr("step", 60)
+                                            .attr("value", max_timestamp);
+
+        this.timeline_holder.append("button").attr("type", "button").attr("id","filter_button").text("Filter");
+        this.timeline_holder.select("#filter_button").on("click", function(){
+            _this.set_filter(d3.select("#from_time").property("value"), d3.select("#to_time").property("value"))
+        })
+
+        //this.button = d3.select(element).append('<input type="range" min="1" max="150" id="time">');
+
+
+
         d3.select(element).select('svg').remove();
         this.svg = d3.select(element).append("svg").attr("width", _this.width)
             .attr("height", _this.height);
 
-        this.button.on("click", function(){
-                _this.filter_events(1441480346079210, 1441480346399210);
-                _this.set_forces();
-                _this.set_elements();
-                _this.zoomed();
-                _this.simulation.alphaTarget(0.01).restart();
-
-            });
 
         this.holder = this.svg.append("g");
 
@@ -297,7 +325,7 @@ var LateralMap = (function() {
                     return d.height / _this.transform.k
                 })
             .attr("zoom", _this.transform.k);
-        //TODO ticked(); //because transform is broken with text
+        this.tick(); //because transform is broken with text
     }
 
     Map.prototype.has_is_dfs = function(d){
@@ -418,7 +446,7 @@ var LateralMap = (function() {
             var xSize = (x2 - x1) + (nx2 - nx1) + xPadding,
                 ySize = (y2 - y1) + (ny2 - ny1) + yPadding;
 
-            if (right - left < xSize && down - up < ySize) { //TODO redo me
+            if (right - left < xSize && down - up < ySize) {
                 if ("data" in tree && (tree.data !== node)) {
                     var point = tree.data;
                     var x = node.x - point.x,
