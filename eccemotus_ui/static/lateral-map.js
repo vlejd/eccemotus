@@ -26,7 +26,7 @@ var LateralMap = (function() {
                 })
             )
             .force('charge', d3.forceManyBody()
-                .distanceMax(300)
+                .distanceMax(500)
                 .strength(-200))
             .force('centering', d3.forceCenter(this.width / 2, this.height / 2))
             .force('circular', circular(this.width / 2, this.height / 2, 400)).stop();
@@ -51,16 +51,34 @@ var LateralMap = (function() {
             .style('marker-start', function(d) {
                 return d.type == 'access' ? 'url(#mid-arrow)' : '';
             })
-            .attr('stroke-width', function(d) {
-                return 2;
-            })
+            .attr('stroke-width', 3)
             .on('click', function(d) {
                 console.log(d);
 
                 for(var e in d.events) {
                     //console.log(d.events[e]);
                 }
-            });
+            })
+            .on('mouseover', function(d) {
+                glink = d3.select(this.parentNode);
+                var line = glink.select('line');
+                var current = line.attr('stroke-width').replace('px', '');
+                line.attr('stroke-width', current*2);
+                var text = glink.select('text');
+                var current = text.style('font-size').replace('px', '');
+                text.style('font-size', current*2);
+
+            })
+            .on('mouseout', function(d) {
+                glink = d3.select(this.parentNode);
+                var line = glink.select('line');
+                var current = line.attr('stroke-width').replace('px', '');
+                line.attr('stroke-width', current/2);
+                var text = glink.select('text');
+                var current = text.style('font-size').replace('px', '');
+                text.style('font-size', current/2);            })
+            ;
+
 
 
         this.edgelabels = this.glinks.append('text')
@@ -282,9 +300,13 @@ var LateralMap = (function() {
             .attr('d', 'M0,-5L10,0L0,5')
             .attr('fill', '#000');
 
+        this.old_scale = 1;
         this.svg.call(d3.zoom()
             .scaleExtent([1 / 5, 20])
             .on('zoom', function() {
+                if(typeof _this.transform != 'undefined'){
+                    _this.old_scale = _this.transform.k;
+                }
                 _this.transform = d3.event.transform;
                 _this.zoomed()
             }));
@@ -321,7 +343,11 @@ var LateralMap = (function() {
         if(typeof _this.transform == 'undefined') return;
         _this.holder.attr('transform', _this.transform);
         _this.nodelabels.style('font-size', _this.vars.font_size / _this.transform.k);
-        _this.edgelabels.style('font-size', _this.vars.font_size / _this.transform.k);
+        _this.edgelabels.style('font-size', function(){
+            var text = d3.select(this);
+            var font_size = text.style('font-size').replace('px','');
+            return font_size * _this.old_scale / _this.transform.k ;
+        });
         _this.nodes.attr('width', function(d) {
                 return d.width / _this.transform.k
             })
@@ -329,6 +355,11 @@ var LateralMap = (function() {
                 return d.height / _this.transform.k
             })
             .attr('zoom', _this.transform.k);
+        _this.links.attr('stroke-width', function(){
+            var text = d3.select(this);
+            var font_size = text.attr('stroke-width').replace('px','');
+            return font_size * _this.old_scale / _this.transform.k ;
+        });
         this.tick(); //because transform is broken with text
     }
 
@@ -431,8 +462,6 @@ var LateralMap = (function() {
                 return(d.source.y + d.target.y) / 2;
             });
 
-        //inheriting opacity
-        //glinks.style('opacity', function(d){console.log(d); return 1;});
     }
 
 
