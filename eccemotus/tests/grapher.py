@@ -3,11 +3,12 @@ TODO(vlejd) tests
 """
 import unittest
 import sys
-import lib.grapher as G
+import eccemotus.lib.grapher as G
+
 
 class GrapherTest(unittest.TestCase):
-    """Test ParserManager """
+  """Test ParserManager """
 
-    def test_graph(self):
-        """Test graph."""
-        #TODO
+  def test_graph(self):
+    """Test graph."""
+    #TODO
