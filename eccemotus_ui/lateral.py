@@ -3,7 +3,7 @@ import sqlite3
 from flask import g
 import json
 
-DATABASE = '/tmp/eccemotus'
+DATABASE = 'eccemotus.sql'
 app = Flask(__name__)
 
 
