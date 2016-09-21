@@ -31,8 +31,11 @@ var LateralMap = (function() {
             .force('charge', d3.forceManyBody()
                 .distanceMax(500)
                 .strength(-200))
+            .force('machine', filteredManyBody()
+                .distanceMax(1000)
+                .strength(-20000))
             .force('centering', d3.forceCenter(this.width / 2, this.height / 2))
-            .force('circular', circular(this.width / 2, this.height / 2, 500)).stop();
+            .stop();
     }
 
     Map.prototype.set_elements = function() {
@@ -563,49 +566,17 @@ var LateralMap = (function() {
         };
     }
 
-    function circular(x, y, r) {
-        /* Creates force that attracts machines on places that are around r
-         * away from point (x,y).
-         */
-        var nodes,
-            alpha;
-        if(x == null) x = 0;
-        if(y == null) y = 0;
-        if(r == null) r = 200;
-
-        function force(_) {
-            var i, n = nodes.length,
-                radius, dx, dy, ratio,
-                upr = r * 1.1,
-                downr = r * 0.9,
-                rr;
-            for(alpha = _, i = 0; i < n; ++i) {
-                dx = nodes[i].x - x;
-                dy = nodes[i].y - y;
-                radius = Math.sqrt(dx * dx + dy * dy)
-                if(radius < 1) {
-                    radius = 1;
-                }
-                if(nodes[i].type == 'machine_name'
-                    || nodes[i].type == 'machine_ip') {
-                    if(radius < downr) {
-                        rr = downr;
-                    } else if(upr < radius) {
-                        rr = upr;
-                    } else {
-                        continue;
-                    }
-                    ratio = (rr - radius) / rr;
-                    nodes[i].vx += ratio * dx/2;
-                    nodes[i].vy += ratio * dy/2;
-                }
-            }
+    function filteredManyBody(){
+        var force = d3.forceManyBody();
+        var old_initialize = force.initialize;
+        force.initialize = function(nodes){
+            var filtered = nodes.filter(function(d){
+                return d.type == 'machine_name' || d.type == 'machine_ip';
+            });
+            console.log(nodes);
+            console.log(filtered);
+            old_initialize(filtered);
         }
-
-        force.initialize = function(_) {
-            nodes = _;
-        };
-
         return force;
     }
 
