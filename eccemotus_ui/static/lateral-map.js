@@ -1,31 +1,31 @@
 var LateralMap = (function() {
 
     var Map = function() {};
-    Map.prototype.set_data = function(data) {
+    Map.prototype.setData = function(data) {
         /* Makes revertible data manipulation possible. */
         // Permanent copy of data.
-        this.backup_data = JSON.parse(JSON.stringify(data));
+        this.backupData = JSON.parse(JSON.stringify(data));
         // Working data.
         this.graph = JSON.parse(JSON.stringify(data));
     }
 
     Map.prototype.reset = function() {
         /* Reset working data to initial data. */
-        this.graph = JSON.parse(JSON.stringify(this.backup_data));
+        this.graph = JSON.parse(JSON.stringify(this.backupData));
     }
 
-    Map.prototype.set_forces = function() {
+    Map.prototype.setForces = function() {
         /* Set up simulation forces that control positions of elements. */
-        var _this = this;
+        var THAT = this;
         this.simulation = d3.forceSimulation(this.graph.nodes).on('tick', function() {
-                _this.tick();
+                THAT.tick();
             })
             .force('link', d3.forceLink(this.graph.links)
                 .id(function(d) {
                     return d.id;
                 })
                 .strength(function(d) {
-                    return link_strength(d);
+                    return linkStrength(d);
                 })
             )
             .force('charge', d3.forceManyBody()
@@ -38,9 +38,9 @@ var LateralMap = (function() {
             .stop();
     }
 
-    Map.prototype.set_elements = function() {
+    Map.prototype.setElements = function() {
         /* Create d3 element and link them to data. */
-        var _this = this;
+        var THAT = this;
         this.holder.selectAll('*').remove();
         this.glinks = this.holder.append('g')
             .attr('class', 'links')
@@ -53,7 +53,7 @@ var LateralMap = (function() {
                 });
 
         this.links = this.glinks.append('line')
-            .attr('stroke', link_color)
+            .attr('stroke', linkColor)
             .attr('stroke-opacity', 0.5)
             .style('marker-start', function(d) {
                 return d.type == 'access' ? 'url(#mid-arrow)' : '';
@@ -89,7 +89,7 @@ var LateralMap = (function() {
                 return d.events.length;
             })
             .style('opacity', 0.5)
-            .style('font-size', _this.vars.font_size)
+            .style('font-size', THAT.vars.fontSize)
             .attr('class', 'linklabel');
 
         this.gnodes = this.holder.append('g')
@@ -109,7 +109,7 @@ var LateralMap = (function() {
 
         function dragstarted(d) {
             if(!d3.event.active) {
-                _this.simulation.alphaTarget(0.1).restart();
+                THAT.simulation.alphaTarget(0.1).restart();
             }
             d.fx = d.x;
             d.fy = d.y;
@@ -121,7 +121,7 @@ var LateralMap = (function() {
         }
 
         function dragended(d) {
-            if(!d3.event.active) _this.simulation.alphaTarget(0);
+            if(!d3.event.active) THAT.simulation.alphaTarget(0);
             d.fx = null;
             d.fy = null;
         }
@@ -134,15 +134,15 @@ var LateralMap = (function() {
                 return d.height;
             })
             .style('opacity', 0.5)
-            .style('fill', node_color)
+            .style('fill', nodeColor)
             .on('click', function(d) {
-                if(_this.vars.highlighted) {
-                    _this.reset_opacity();
+                if(THAT.vars.highlighted) {
+                    THAT.resetOpacity();
                 } else {
                     // nodes that are reachable with only "has" or "is" edges
-                    var set = _this.has_is_dfs(d);
+                    var set = THAT.hasIsDfs(d);
                     // highlight links/endges that goes to/out of nodes from set
-                    _this.glinks.style('opacity', 0.1);
+                    THAT.glinks.style('opacity', 0.1);
                     graph.links.forEach(function(d) {
                         var glink = d3.select('#glink_' + d.index);
                         if(set.has(d.source.id) || set.has(d.target.id)) {
@@ -150,14 +150,14 @@ var LateralMap = (function() {
                         }
                     });
                     // highlight nodes from set
-                    _this.gnodes.style('opacity', 0.1);
-                    _this.select_by_id(_this.nodes, set).each(function(d) {
+                    THAT.gnodes.style('opacity', 0.1);
+                    THAT.selectById(THAT.nodes, set).each(function(d) {
                         d3.select(this.parentNode).style('opacity', 1);
                     });
                     // highlight nodes, that can reach node from set with only
                     // one "access" edge
-                    var sshset = _this.access_dfs(set);
-                    _this.select_by_id(_this.nodes, sshset).each(function(d) {
+                    var sshset = THAT.accessDfs(set);
+                    THAT.selectById(THAT.nodes, sshset).each(function(d) {
                         d3.select(this)
                             .style('stroke', 'black')
                             .style('stroke-width', 1)
@@ -165,7 +165,7 @@ var LateralMap = (function() {
                             .style('opacity', 1);
                     });
                 }
-                _this.vars.highlighted = !_this.vars.highlighted;
+                THAT.vars.highlighted = !THAT.vars.highlighted;
             })
             .on('mouseover', function(d) {
                 /* Show node's full text.*/
@@ -185,60 +185,60 @@ var LateralMap = (function() {
 
         ;
         this.nodeLabels = this.gnodes.append('text')
-            .style('font-size', _this.vars.font_size)
+            .style('font-size', THAT.vars.fontSize)
             .style('font-family', 'monospace')
             .style('pointer-events', 'none')
             .text(function(d) {
                 /* Makes sure the node's text is not too long. */
                 var text = d.value;
-                if(text.length <= _this.vars.text_length) {
+                if(text.length <= THAT.vars.textLength) {
                     return text;
                 } else {
-                    return text.slice(0, _this.vars.text_length - 3) + '...';
+                    return text.slice(0, THAT.vars.textLength - 3) + '...';
                 }
             })
             .style('fill', 'black');
     }
 
-    Map.prototype.filter_events = function(from_time, to_time) {
-        /* Remove edges that did not happen between  from_time and to_time.
+    Map.prototype.filterEvents = function(fromTime, toTime) {
+        /* Remove edges that did not happen between  fromTime and toTime.
          * Note that other methods have to be called for this to have actual
          * effect.
          */
-        var new_links = new Array();
-        var _this = this;
+        var newLinks = new Array();
+        var THAT = this;
         this.graph.links.forEach(function(d) {
-            var new_events = new Array();
+            var newEvents = new Array();
             d.events.forEach(function(e) {
-                if(e.timestamp >= from_time && e.timestamp <= to_time) {
-                    new_events.push(e);
+                if(e.timestamp >= fromTime && e.timestamp <= toTime) {
+                    newEvents.push(e);
                 }
             });
-            if(new_events.length > 0) {
-                d.events = new_events;
-                new_links.push(d);
+            if(newEvents.length > 0) {
+                d.events = newEvents;
+                newLinks.push(d);
             }
         });
-        this.graph.links = new_links;
+        this.graph.links = newLinks;
     }
 
-    Map.prototype.set_filter = function(from_time, to_time) {
+    Map.prototype.setFilter = function(fromTime, toTime) {
         /* Sets filter and triggers and ensures proper drawing of the graph. */
-        var _this = this;
-        _this.filter_events(from_time, to_time);
+        var THAT = this;
+        THAT.filterEvents(fromTime, toTime);
         // this must be done because some links maybe filtered out.
-        _this.set_forces();
-        _this.set_elements();
+        THAT.setForces();
+        THAT.setElements();
         // this will restore zoom level as before.
-        _this.zoomed();
-        _this.simulation.alphaTarget(0.01).restart();
+        THAT.zoomed();
+        THAT.simulation.alphaTarget(0.01).restart();
     }
 
     Map.prototype.render = function(data, element) {
         /* Renders actual graph based on data in element. */
         this.vars = { // variables that needs to be accessed in other methods
-            font_size: 15,
-            text_length: 20,
+            fontSize: 15,
+            textLength: 20,
             margin: {
                 top: 50,
                 right: 75,
@@ -247,59 +247,59 @@ var LateralMap = (function() {
             },
             highlighted: false
         };
-        var _this = this;
+        var THAT = this;
         this.height = 1100;
         this.width = 1200;
         this.simulation;
         this.element = element;
 
-        this.set_data(data);
-        this.set_forces();
+        this.setData(data);
+        this.setForces();
 
         graph = this.graph;
-        var min_timestamp = 2439118792937500;
-        var max_timestamp = 0;
+        var minTimestamp = 2439118792937500;
+        var maxTimestamp = 0;
 
         graph.links.forEach(function(link) {
             link.events.forEach(function(e) {
-                min_timestamp = Math.min(min_timestamp, e.timestamp);
-                max_timestamp = Math.max(max_timestamp, e.timestamp);
+                minTimestamp = Math.min(minTimestamp, e.timestamp);
+                maxTimestamp = Math.max(maxTimestamp, e.timestamp);
             })
         })
 
         graph.nodes.forEach(function(d) {
             d.height = 20;
-            d.width = Math.min(_this.vars.text_length, d.value.length) * 10 + 2;
+            d.width = Math.min(THAT.vars.textLength, d.value.length) * 10 + 2;
         });
 
-        this.timeline_holder = d3.select(element).append('p');
+        this.timelineHolder = d3.select(element).append('p');
 
-        this.timeline_holder.append('input').attr('type', 'number')
+        this.timelineHolder.append('input').attr('type', 'number')
             .attr('id', 'from_time')
             .attr('step', 60)
-            .attr('value', min_timestamp);
+            .attr('value', minTimestamp);
 
-        this.timeline_holder.append('input').attr('type', 'number')
+        this.timelineHolder.append('input').attr('type', 'number')
             .attr('id', 'to_time')
             .attr('step', 60)
-            .attr('value', max_timestamp);
+            .attr('value', maxTimestamp);
 
-        this.timeline_holder.append('button')
+        this.timelineHolder.append('button')
             .attr('type', 'button')
             .attr('id', 'filter_button')
             .text('Filter');
 
-        this.timeline_holder.select('#filter_button')
+        this.timelineHolder.select('#filter_button')
             .on('click', function() {
-                var from_time = d3.select('#from_time').property('value');
-                var to_time = d3.select('#to_time').property('value');
-                _this.set_filter(from_time, to_time);
+                var fromTime = d3.select('#from_time').property('value');
+                var toTime = d3.select('#to_time').property('value');
+                THAT.setFilter(fromTime, toTime);
             });
 
         d3.select(element).select('svg').remove();
         this.svg = d3.select(element).append('svg')
-            .attr('width', _this.width)
-            .attr('height', _this.height);
+            .attr('width', THAT.width)
+            .attr('height', THAT.height);
 
 
         this.holder = this.svg.append('g');
@@ -315,18 +315,18 @@ var LateralMap = (function() {
             .attr('d', 'M0,-5L10,0L0,5')
             .attr('fill', '#000');
 
-        this.old_scale = 1;
+        this.oldScale = 1;
         this.svg.call(d3.zoom()
             .scaleExtent([1 / 5, 20])
             .on('zoom', function() {
-                if(typeof _this.transform != 'undefined'){
-                    _this.old_scale = _this.transform.k;
+                if(typeof THAT.transform != 'undefined'){
+                    THAT.oldScale = THAT.transform.k;
                 }
-                _this.transform = d3.event.transform;
-                _this.zoomed()
+                THAT.transform = d3.event.transform;
+                THAT.zoomed()
             }));
 
-        this.set_elements();
+        this.setElements();
 
         this.simulation.restart();
 
@@ -341,14 +341,14 @@ var LateralMap = (function() {
             this.G[link.target.id].push(link);
         }
     };
-    Map.prototype.select_by_id = function(selection, id_set) {
+    Map.prototype.selectById = function(selection, idSet) {
         /* Helper function to select multiple elements by their data ids.*/
         return selection.filter(function(d) {
-            return id_set.has(d.id);
+            return idSet.has(d.id);
         });
     }
 
-    Map.prototype.reset_opacity = function() {
+    Map.prototype.resetOpacity = function() {
         /* Set opacity of elements to their initial value. */
         this.nodes.style('stroke-width', 0)
         this.glinks.style('opacity', 1);
@@ -357,47 +357,45 @@ var LateralMap = (function() {
 
     Map.prototype.zoomed = function() {
         /* Handles zoom event*/
-        var _this = this;
-        if(typeof _this.transform == 'undefined') {
+        var THAT = this;
+        if(typeof THAT.transform == 'undefined') {
             return;
         }
-        _this.holder.attr('transform', _this.transform);
-        var new_font_size = _this.vars.font_size / _this.transform.k;
-        _this.nodeLabels.style('font-size', new_font_size);
-        _this.linkLabels.style('font-size', function(){
-            var text = d3.select(this);
-            var font_size = text.style('font-size').replace('px','');
-            return font_size * _this.old_scale / _this.transform.k ;
+        THAT.holder.attr('transform', THAT.transform);
+        var newFontSize = THAT.vars.fontSize / THAT.transform.k;
+        THAT.nodeLabels.style('font-size', newFontSize);
+        THAT.linkLabels.style('font-size', function(){
+            return newFontSize;
         });
-        _this.nodes.attr('width', function(d) {
-                return d.width / _this.transform.k
+        THAT.nodes.attr('width', function(d) {
+                return d.width / THAT.transform.k
             })
             .attr('height', function(d) {
-                return d.height / _this.transform.k
+                return d.height / THAT.transform.k
             })
-            .attr('zoom', _this.transform.k);
-        _this.links.attr('stroke-width', function(){
+            .attr('zoom', THAT.transform.k);
+        THAT.links.attr('stroke-width', function(){
             var text = d3.select(this);
-            var font_size = text.attr('stroke-width').replace('px','');
-            return font_size * _this.old_scale / _this.transform.k ;
+            var fontSize = text.attr('stroke-width').replace('px','');
+            return fontSize * THAT.oldScale / THAT.transform.k ;
         });
         this.tick(); //because transform is broken with text
     }
 
-    Map.prototype.has_is_dfs = function(d) {
+    Map.prototype.hasIsDfs = function(d) {
         /* Finds all nodes that are reachable from d only through 'has' and
          * 'is' links/edges. *
          * d can be array of nodes or one node.
          */
-        var _this = this;
+        var THAT = this;
         var done = new Set();
-        var link_types = ['has', 'is']
+        var linkTypes = ['has', 'is']
         var dfs = function(node) {
             if(done.has(node)) return;
             done.add(node);
-            for(var i = 0; i < _this.G[node].length; i++) {
-                var link = _this.G[node][i];
-                if(link_types.indexOf(link.type) !== -1) {
+            for(var i = 0; i < THAT.G[node].length; i++) {
+                var link = THAT.G[node][i];
+                if(linkTypes.indexOf(link.type) !== -1) {
                     dfs(link.source.id);
                     dfs(link.target.id);
                 }
@@ -413,9 +411,8 @@ var LateralMap = (function() {
         return done;
     }
 
-    Map.prototype.access_dfs = function(d) {
+    Map.prototype.accessDfs = function(d) {
         var done = new Set();
-        var _d = d;
         d = Array.from(d);
         for(var i = 0; i < d.length; i++) {
             for(var j = 0; j < this.G[d[i]].length; j++) {
@@ -568,19 +565,19 @@ var LateralMap = (function() {
 
     function filteredManyBody(){
         var force = d3.forceManyBody();
-        var old_initialize = force.initialize;
+        var oldInitialize = force.initialize;
         force.initialize = function(nodes){
             var filtered = nodes.filter(function(d){
                 return d.type == 'machine_name' || d.type == 'machine_ip';
             });
             console.log(nodes);
             console.log(filtered);
-            old_initialize(filtered);
+            oldInitialize(filtered);
         }
         return force;
     }
 
-    function node_color(node) {
+    function nodeColor(node) {
         var maper = {
             'machine_name': d3.schemeCategory20[1],
             'ip': d3.schemeCategory20[3],
@@ -594,7 +591,7 @@ var LateralMap = (function() {
         }
     }
 
-    function link_strength(link) {
+    function linkStrength(link) {
         var maper = {
             'has': 1,
             'is': 1,
@@ -608,7 +605,7 @@ var LateralMap = (function() {
         }
     }
 
-    function link_color(link) {
+    function linkColor(link) {
         var maper = {
             'is': d3.color('red'),
             'has': d3.color('blue'),
