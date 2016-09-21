@@ -81,13 +81,13 @@ var LateralMap = (function() {
 
 
 
-        this.edgelabels = this.glinks.append('text')
+        this.linklabels = this.glinks.append('text')
             .text(function(d) {
                 return d.events.length;
             })
             .style('opacity', 0.5)
             .style('font-size', _this.vars.font_size)
-            .attr('class', 'edgelabel');
+            .attr('class', 'linklabel');
 
         this.gnodes = this.holder.append('g')
             .attr('class', 'nodes')
@@ -343,7 +343,7 @@ var LateralMap = (function() {
         if(typeof _this.transform == 'undefined') return;
         _this.holder.attr('transform', _this.transform);
         _this.nodelabels.style('font-size', _this.vars.font_size / _this.transform.k);
-        _this.edgelabels.style('font-size', function(){
+        _this.linklabels.style('font-size', function(){
             var text = d3.select(this);
             var font_size = text.style('font-size').replace('px','');
             return font_size * _this.old_scale / _this.transform.k ;
@@ -366,13 +366,13 @@ var LateralMap = (function() {
     Map.prototype.has_is_dfs = function(d) {
         var _this = this;
         var done = new Set();
-        var edge_types = ['has', 'is']
+        var link_types = ['has', 'is']
         var dfs = function(node) {
             if(done.has(node)) return;
             done.add(node);
             for(var i = 0; i < _this.G[node].length; i++) {
                 var link = _this.G[node][i];
-                if(edge_types.indexOf(link.type) !== -1) {
+                if(link_types.indexOf(link.type) !== -1) {
                     dfs(link.source.id);
                     dfs(link.target.id);
                 }
@@ -454,7 +454,7 @@ var LateralMap = (function() {
                 var rect_height = d3.select(this.parentNode).select('rect').attr('height');
                 return d.y + rect_height * 0.85;
             });
-        this.edgelabels
+        this.linklabels
             .attr('x', function(d) {
                 return(d.source.x + d.target.x) / 2;
             })

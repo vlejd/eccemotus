@@ -18,10 +18,8 @@
 
     </div>
     <script>
-        var graph_id = {{graph.id}};
         var map = new LateralMap.Map();
-        console.log(graph_id);
-        $.get("/api/graph/" + graph_id, function(data, status) {
+        $.get("{{ url_for('graph_geter', graph_id=graph.id) }}", function(data, status) {
             console.log("api done");
             console.log(data.graph)
             console.log(status);
