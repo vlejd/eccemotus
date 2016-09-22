@@ -1,4 +1,4 @@
-"""Runs lateral.py server. """
+"""Runs web server interface for eccemotus. """
 import argparse
 from eccemotus_ui.lateral import run
 
