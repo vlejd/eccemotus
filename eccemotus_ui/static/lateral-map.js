@@ -58,7 +58,7 @@ var LateralMap = (function() {
             .style('marker-start', function(d) {
                 return d.type == 'access' ? 'url(#mid-arrow)' : '';
             })
-            .attr('stroke-width', 3)
+            .attr('stroke-width', THAT.vars.linkWidth)
             .on('click', function(d) {
                 console.log(d);
                 for(var e in d.events) {
@@ -68,20 +68,22 @@ var LateralMap = (function() {
             .on('mouseover', function(d) {
                 glink = d3.select(this.parentNode);
                 var line = glink.select('line');
-                var current = line.attr('stroke-width').replace('px', '');
-                line.attr('stroke-width', current*2);
+                var newWidth = 2 * THAT.vars.linkWidth / THAT.oldScale;
+                line.attr('stroke-width', newWidth);
+
                 var text = glink.select('text');
-                var current = text.style('font-size').replace('px', '');
-                text.style('font-size', current*2);
+                var newFontSize = 2 * THAT.vars.fontSize / THAT.oldScale;
+                text.style('font-size', newFontSize);
             })
             .on('mouseout', function(d) {
                 glink = d3.select(this.parentNode);
                 var line = glink.select('line');
                 var current = line.attr('stroke-width').replace('px', '');
-                line.attr('stroke-width', current/2);
+                line.attr('stroke-width', THAT.vars.linkWidth / THAT.oldScale);
+
                 var text = glink.select('text');
-                var current = text.style('font-size').replace('px', '');
-                text.style('font-size', current/2);
+                var newFontSize = THAT.vars.fontSize / THAT.oldScale;
+                text.style('font-size', newFontSize);
             });
 
         this.linkLabels = this.glinks.append('text')
@@ -174,6 +176,11 @@ var LateralMap = (function() {
                         return this.textContent;
                     })
                     .text(d.value);
+                d3.select(this).attr('width', function(d){
+                    return (d.value.length * 10 + 2) / THAT.oldScale;
+                });
+                d3.select(this.parentNode)
+                    .attr('mouseover', '');
             })
             .on('mouseout', function(d) {
                 /* Reset node's text to initial value. */
@@ -181,6 +188,13 @@ var LateralMap = (function() {
                     .text(function(d) {
                         return d3.select(this).attr('old_text');
                     });
+
+                d3.select(this).attr('width', function(d){
+                    var length = Math.min(THAT.vars.textLength, d.value.length);
+                    return (length * 10 + 2) / THAT.oldScale;
+                });
+                d3.select(this.parentNode)
+                    .attr('mouseover', null);
             })
 
         ;
@@ -237,6 +251,7 @@ var LateralMap = (function() {
     Map.prototype.render = function(data, element) {
         /* Renders actual graph based on data in element. */
         this.vars = { // variables that needs to be accessed in other methods
+            linkWidth: 4,
             fontSize: 15,
             textLength: 20,
             margin: {
@@ -364,9 +379,7 @@ var LateralMap = (function() {
         THAT.holder.attr('transform', THAT.transform);
         var newFontSize = THAT.vars.fontSize / THAT.transform.k;
         THAT.nodeLabels.style('font-size', newFontSize);
-        THAT.linkLabels.style('font-size', function(){
-            return newFontSize;
-        });
+        THAT.linkLabels.style('font-size', newFontSize);
         THAT.nodes.attr('width', function(d) {
                 return d.width / THAT.transform.k
             })
@@ -375,9 +388,7 @@ var LateralMap = (function() {
             })
             .attr('zoom', THAT.transform.k);
         THAT.links.attr('stroke-width', function(){
-            var text = d3.select(this);
-            var fontSize = text.attr('stroke-width').replace('px','');
-            return fontSize * THAT.oldScale / THAT.transform.k ;
+            return THAT.vars.linkWidth / THAT.transform.k ;
         });
         this.tick(); //because transform is broken with text
     }
@@ -496,39 +507,57 @@ var LateralMap = (function() {
 
     function collide(node) {
         /* Returns visitor that detects and resolves collisions with node.*/
+        var nxPadding = node.width*0.02,
+            nyPadding = node.height*0.1,
+            nx1 = node.x - nxPadding,
+            ny1 = node.y - nyPadding,
+            nx2 = node.x + node.width + nxPadding,
+            ny2 = node.y + node.height + nyPadding,
+            ncx = (nx1 + nx2) / 2,
+            ncy = (ny1 + ny2) / 2;
+
+
         return function(tree, x1, y1, x2, y2) {
             /* Gets subguadtree and current bounding box.
              * Determines if this bounding box needs to be considered.
              * In case the tree contains only one node, resolves collision with
              * this node.
              */
-            var xPadding = node.width*0.02,
-                yPadding = node.width*0.02;
             // expand the bounding box
-            x2 += node.width + xPadding;
-            y2 += node.height + yPadding;
-            var nx1 = node.x - xPadding,
-                ny1 = node.y - yPadding,
-                nx2 = node.x + node.width + xPadding,
-                ny2 = node.y + node.height + yPadding,
-                left = Math.min(x1, nx1, x2, nx2),
+            // TODO redo
+            x1 -= node.width + nxPadding;
+            y1 -= node.height + nyPadding;
+            x2 += node.width + nxPadding;
+            y2 += node.height + nyPadding;
+            // initialize  variables for geometric computations
+            var left = Math.min(x1, nx1, x2, nx2),
                 right = Math.max(x1, nx1, x2, nx2),
                 up = Math.min(y1, ny1, y2, ny2),
                 down = Math.max(y1, ny1, y2, ny2),
                 xSize = (x2 - x1) + (nx2 - nx1),
-                ySize = (y2 - y1) + (ny2 - ny1);
-
-            var xOverlap = xSize - (right - left),
+                ySize = (y2 - y1) + (ny2 - ny1),
+                xOverlap = xSize - (right - left),
                 yOverlap = ySize - (down - up);
 
             // check is node overlaps with the bounding box
             if(xOverlap > 0 && yOverlap > 0) {
                 if('data' in tree && (tree.data !== node)) {
+                    // we are in subtree that represents one node
                     var point = tree.data;
-                    var dx = node.x - point.x,
-                        dy = node.y - point.y,
-                        xSpacing = (point.width + node.width) / 2,
-                        ySpacing = (point.height + node.height) / 2,
+                    // we need to exactly determine now much two nodes overlap
+                    var pxPadding = point.width*0.02,
+                        pyPadding = point.height*0.02,
+                        px1 = point.x - pxPadding,
+                        py1 = point.y - pyPadding,
+                        px2 = point.x + point.width + pxPadding,
+                        py2 = point.y + point.height + pyPadding,
+                        pcx = (px1 + px2) / 2,
+                        pcy = (py1 + py2) / 2;
+
+                    var dx = ncx - pcx,
+                        dy = ncy - pcy,
+                        xSpacing = ((px2 - px1) + (nx2 - nx1)) / 2,
+                        ySpacing = ((py2 - py1) + (ny2 - ny1)) / 2,
                         absX = Math.abs(dx),
                         absY = Math.abs(dy),
                         l,
@@ -537,11 +566,10 @@ var LateralMap = (function() {
 
                     if(absX < xSpacing && absY < ySpacing) {
                         l = Math.sqrt(dx * dx + dy * dy);
-
                         lx = (absX - xSpacing) / l;
                         ly = (absY - ySpacing) / l;
 
-                        // the one that's barely within the bounds probably triggered the collision
+                        // move only in one dimension
                         if(Math.abs(lx) > Math.abs(ly)) {
                             lx = 0;
                         } else {
@@ -570,8 +598,6 @@ var LateralMap = (function() {
             var filtered = nodes.filter(function(d){
                 return d.type == 'machine_name' || d.type == 'machine_ip';
             });
-            console.log(nodes);
-            console.log(filtered);
             oldInitialize(filtered);
         }
         return force;
