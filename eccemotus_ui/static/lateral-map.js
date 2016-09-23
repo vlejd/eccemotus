@@ -61,8 +61,14 @@ var LateralMap = (function() {
             .attr('stroke-width', THAT.vars.linkWidth)
             .on('click', function(d) {
                 console.log(d);
+                var  i=0;
                 for(var e in d.events) {
-                    //console.log(d.events[e]);
+                    console.log(d.events[e]);
+                    i+=1;
+                    if (i>10){
+                        console.log('...');
+                        break;
+                    }
                 }
             })
             .on('mouseover', function(d) {
