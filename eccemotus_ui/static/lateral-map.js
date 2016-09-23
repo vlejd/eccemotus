@@ -27,6 +27,9 @@ var LateralMap = (function() {
                 .strength(function(d) {
                     return linkStrength(d);
                 })
+                .distance(function(d) {
+                    return linkDistance(d);
+                })
             )
             .force('charge', d3.forceManyBody()
                 .distanceMax(500)
@@ -148,6 +151,7 @@ var LateralMap = (function() {
             .style('fill', nodeColor)
             .on('click', function(d) {
                 console.log(d);
+                d3.select('#to_merge').property('value', d.cluster);
                 if(THAT.vars.highlighted) {
                     THAT.resetOpacity();
                 } else {
@@ -258,6 +262,44 @@ var LateralMap = (function() {
         this.simulation.alphaTarget(0.01).restart();
     }
 
+
+    Map.prototype.clusterRoutine = function(cluster_id){
+        var THAT = this;
+        this.gnodes.style('visibility', function(d){
+            if(THAT.merged.has(d.cluster) && d.cluster != d.id){
+                return 'hidden';
+            } else{
+                return 'visible';
+            }
+        });
+        this.linkLabels.style('visibility', function(d){
+            if(THAT.getRealTarget(d.source) == THAT.getRealTarget(d.target)){
+                return 'hidden';
+            } else{
+                return 'visible';
+            }
+        });
+        this.tick();
+    }
+
+    Map.prototype.merge = function(cluster_id){
+        /* Merge nodes in given cluster. */
+        cluster_id = parseInt(cluster_id);
+        // mark cluster a merged
+        this.merged.add(cluster_id);
+        this.clusterRoutine();
+    }
+
+    Map.prototype.expand = function(cluster_id){
+        /* Merge nodes in given cluster. */
+        cluster_id = parseInt(cluster_id);
+        // mark cluster a merged
+        if(this.merged.has(cluster_id)){
+            this.merged.delete(cluster_id);
+        }
+        this.clusterRoutine();
+    }
+
     Map.prototype.render = function(data, element) {
         /* Renders actual graph based on data in element. */
         this.vars = { // variables that needs to be accessed in other methods
@@ -299,12 +341,14 @@ var LateralMap = (function() {
 
         this.timelineHolder = d3.select(element).append('p');
 
-        this.timelineHolder.append('input').attr('type', 'number')
+        var fromTimeInput = this.timelineHolder.append('input')
+            .attr('type', 'number')
             .attr('id', 'from_time')
             .attr('step', 1000000*60*60*24)
             .attr('value', minTimestamp);
 
-        this.timelineHolder.append('input').attr('type', 'number')
+        var toTimeInput = this.timelineHolder.append('input')
+            .attr('type', 'number')
             .attr('id', 'to_time')
             .attr('step', 1000000*60*60*24)
             .attr('value', maxTimestamp);
@@ -314,8 +358,8 @@ var LateralMap = (function() {
             .attr('id', 'filter_button')
             .text('Filter')
             .on('click', function() {
-                var fromTime = d3.select('#from_time').property('value');
-                var toTime = d3.select('#to_time').property('value');
+                var fromTime = fromTimeInput.property('value');
+                var toTime = toTimeInput.property('value');
                 THAT.setFilter(fromTime, toTime);
             });
 
@@ -324,13 +368,62 @@ var LateralMap = (function() {
             .attr('id', 'reset_filter_button')
             .text('Reset')
             .on('click', function() {
-                var fromTime = d3.select('#from_time').property('value');
-                var toTime = d3.select('#to_time').property('value');
+                var fromTime = fromTimeInput.property('value');
+                var toTime = toTimeInput.property('value');
                 THAT.setFilter(minTimestamp, maxTimestamp);
-                d3.select('#from_time').property('value', minTimestamp);
-                d3.select('#to_time').property('value', maxTimestamp);
-
+                fromTimeInput.property('value', minTimestamp);
+                toTimeInput.property('value', maxTimestamp);
             });
+
+        var MergeInput = this.timelineHolder.append('input')
+            .attr('type', 'number')
+            .attr('id', 'to_merge');
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .text('Merge')
+            .on('click', function(){
+                var cluster_id = MergeInput.property('value');
+                THAT.merge(cluster_id);
+            })
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .text('Expand')
+            .on('click', function(){
+                var cluster_id = MergeInput.property('value');
+                THAT.expand(cluster_id);
+            })
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .text('Merge All')
+            .on('click', function(){
+                THAT.graph.nodes.forEach(function(d){
+                    THAT.merge(d.cluster);
+                })
+            })
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .attr('id', 'merge_button')
+            .text('Expand All')
+            .on('click', function(){
+                THAT.graph.nodes.forEach(function(d){
+                    THAT.expand(d.cluster);
+                })
+            })
+
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .text('Stop')
+            .on('click', function(){THAT.simulation.stop();})
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .text('Restart')
+            .on('click', function(){THAT.simulation.restart();})
 
         d3.select(element).select('svg').remove();
         this.svg = d3.select(element).append('svg')
@@ -365,6 +458,9 @@ var LateralMap = (function() {
         this.setElements();
 
         this.simulation.restart();
+
+        // dictionary of merged clusters.
+        this.merged = new Set();
 
         // adjacency list representation of graph
         this.G = new Array(graph.nodes.length);
@@ -462,9 +558,19 @@ var LateralMap = (function() {
         return done;
     }
 
+    Map.prototype.getRealTarget = function(node){
+        if(this.merged.has(node.cluster)){
+            return this.graph.nodes[node.cluster];
+        } else {
+            return node;
+        }
+        return node;
+    }
+
+
     Map.prototype.tick = function() {
         /* Handles one tick of simulation. */
-
+        var THAT = this;
         // using quadtree for fast collision detection.
         var q = d3.quadtree()
             .x(function(d) {
@@ -477,22 +583,22 @@ var LateralMap = (function() {
 
         for(var i = 0; i < this.graph.nodes.length; i++) {
             // visit every node and check for collisions
-            q.visit(collide(this.graph.nodes[i]));
+            q.visit(collide(this.graph.nodes[i], this.oldScale));
         }
 
         // moving links
         this.links
             .attr('x1', function(d) {
-                return d.source.x;
+                return THAT.getRealTarget(d.source).x;
             })
             .attr('y1', function(d) {
-                return d.source.y;
+                return THAT.getRealTarget(d.source).y;
             })
             .attr('x2', function(d) {
-                return d.target.x;
+                return THAT.getRealTarget(d.target).x;
             })
             .attr('y2', function(d) {
-                return d.target.y;
+                return THAT.getRealTarget(d.target).y;
             });
         // moving nodes
         this.nodes
@@ -517,23 +623,28 @@ var LateralMap = (function() {
         // moving link labels
         this.linkLabels
             .attr('x', function(d) {
-                return(d.source.x + d.target.x) / 2;
+                var realSource = THAT.getRealTarget(d.source);
+                var realTarget = THAT.getRealTarget(d.target);
+                return ( realSource.x + realTarget.x ) / 2;
             })
             .attr('y', function(d) {
-                return(d.source.y + d.target.y) / 2;
+                var realSource = THAT.getRealTarget(d.source);
+                var realTarget = THAT.getRealTarget(d.target);
+                return(realSource.y + realTarget.y) / 2;
             });
 
     }
 
 
-    function collide(node) {
+    function collide(node, scale) {
+        scale = 1;
         /* Returns visitor that detects and resolves collisions with node.*/
-        var nxPadding = node.width*0.02,
-            nyPadding = node.height*0.1,
+        var nxPadding = node.width * 0.02 / scale,
+            nyPadding = node.height * 0.1 / scale,
             nx1 = node.x - nxPadding,
             ny1 = node.y - nyPadding,
-            nx2 = node.x + node.width + nxPadding,
-            ny2 = node.y + node.height + nyPadding,
+            nx2 = node.x + node.width / scale + nxPadding,
+            ny2 = node.y + node.height / scale + nyPadding,
             ncx = (nx1 + nx2) / 2,
             ncy = (ny1 + ny2) / 2;
 
@@ -546,10 +657,10 @@ var LateralMap = (function() {
              */
             // expand the bounding box
             // TODO redo
-            x1 -= node.width + nxPadding;
-            y1 -= node.height + nyPadding;
-            x2 += node.width + nxPadding;
-            y2 += node.height + nyPadding;
+            x1 -= node.width / scale + nxPadding;
+            y1 -= node.height / scale + nyPadding;
+            x2 += node.width / scale + nxPadding;
+            y2 += node.height / scale + nyPadding;
             // initialize  variables for geometric computations
             var left = Math.min(x1, nx1, x2, nx2),
                 right = Math.max(x1, nx1, x2, nx2),
@@ -566,12 +677,12 @@ var LateralMap = (function() {
                     // we are in subtree that represents one node
                     var point = tree.data;
                     // we need to exactly determine now much two nodes overlap
-                    var pxPadding = point.width*0.02,
-                        pyPadding = point.height*0.02,
+                    var pxPadding = point.width*0.02 / scale,
+                        pyPadding = point.height*0.02 / scale,
                         px1 = point.x - pxPadding,
                         py1 = point.y - pyPadding,
-                        px2 = point.x + point.width + pxPadding,
-                        py2 = point.y + point.height + pyPadding,
+                        px2 = point.x + point.width / scale + pxPadding,
+                        py2 = point.y + point.height / scale + pyPadding,
                         pcx = (px1 + px2) / 2,
                         pcy = (py1 + py2) / 2;
 
@@ -649,6 +760,20 @@ var LateralMap = (function() {
             return maper[link.type];
         } else {
             return 1;
+        }
+    }
+
+    function linkDistance(link) {
+        var maper = {
+            'has': 10,
+            'is': 10,
+            'access': 300,
+        }
+        return maper[link.type];
+        if(link.type in maper) {
+            return maper[link.type];
+        } else {
+            return 200;
         }
     }
 
