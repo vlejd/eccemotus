@@ -62,14 +62,17 @@ var LateralMap = (function() {
             .on('click', function(d) {
                 console.log(d);
                 var  i=0;
+                var minTime = 2439118792937500;
+                var maxTime = 0;
                 for(var e in d.events) {
-                    console.log(d.events[e]);
+                    minTime = Math.min(minTime, d.events[e].timestamp);
+                    maxTime = Math.max(maxTime, d.events[e].timestamp);
                     i+=1;
-                    if (i>10){
-                        console.log('...');
-                        break;
+                    if (i<10){
+                        console.log(d.events[e]);
                     }
                 }
+                console.log(minTime, maxTime);
             })
             .on('mouseover', function(d) {
                 glink = d3.select(this.parentNode);
@@ -228,7 +231,7 @@ var LateralMap = (function() {
          */
         var newLinks = new Array();
         var THAT = this;
-        this.graph.links.forEach(function(d) {
+        this.backupData.links.forEach(function(d) {
             var newEvents = new Array();
             d.events.forEach(function(e) {
                 if(e.timestamp >= fromTime && e.timestamp <= toTime) {
@@ -245,14 +248,14 @@ var LateralMap = (function() {
 
     Map.prototype.setFilter = function(fromTime, toTime) {
         /* Sets filter and triggers and ensures proper drawing of the graph. */
-        var THAT = this;
-        THAT.filterEvents(fromTime, toTime);
+
+        this.filterEvents(fromTime, toTime);
         // this must be done because some links maybe filtered out.
-        THAT.setForces();
-        THAT.setElements();
+        this.setForces();
+        this.setElements();
         // this will restore zoom level as before.
-        THAT.zoomed();
-        THAT.simulation.alphaTarget(0.01).restart();
+        this.zoomed();
+        this.simulation.alphaTarget(0.01).restart();
     }
 
     Map.prototype.render = function(data, element) {
@@ -298,24 +301,35 @@ var LateralMap = (function() {
 
         this.timelineHolder.append('input').attr('type', 'number')
             .attr('id', 'from_time')
-            .attr('step', 60)
+            .attr('step', 1000000*60*60*24)
             .attr('value', minTimestamp);
 
         this.timelineHolder.append('input').attr('type', 'number')
             .attr('id', 'to_time')
-            .attr('step', 60)
+            .attr('step', 1000000*60*60*24)
             .attr('value', maxTimestamp);
 
         this.timelineHolder.append('button')
             .attr('type', 'button')
             .attr('id', 'filter_button')
-            .text('Filter');
-
-        this.timelineHolder.select('#filter_button')
+            .text('Filter')
             .on('click', function() {
                 var fromTime = d3.select('#from_time').property('value');
                 var toTime = d3.select('#to_time').property('value');
                 THAT.setFilter(fromTime, toTime);
+            });
+
+        this.timelineHolder.append('button')
+            .attr('type', 'button')
+            .attr('id', 'reset_filter_button')
+            .text('Reset')
+            .on('click', function() {
+                var fromTime = d3.select('#from_time').property('value');
+                var toTime = d3.select('#to_time').property('value');
+                THAT.setFilter(minTimestamp, maxTimestamp);
+                d3.select('#from_time').property('value', minTimestamp);
+                d3.select('#to_time').property('value', maxTimestamp);
+
             });
 
         d3.select(element).select('svg').remove();
