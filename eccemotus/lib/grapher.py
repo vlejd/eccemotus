@@ -184,6 +184,34 @@ class Graph():
     """Serialized only required information for visualization."""
     return {"nodes": self.nodes, "links": self.edges}
 
+  def finalize(self):
+    """ Assign each cluster of nodes its identifier.
+
+    Cluster is subgraph of has/is nodes and approximately represents one
+    machine."""
+
+    G = [[] for node in self.nodes]
+    for i, edge in enumerate(self.edges):
+      G[edge['source']].append(i)
+      G[edge['target']].append(i)
+
+    def dfs(node_id, cluster_id):
+      if 'cluster' in self.nodes[node_id]:
+        return
+
+      self.nodes[node_id]['cluster'] = cluster_id
+
+      for edge_id in G[node_id]:
+        edge = self.edges[edge_id]
+        if edge['type'] not in [self.EDGE_HAS, self.EDGE_IS]:
+          continue
+
+        dfs(edge['source'], cluster_id)
+        dfs(edge['target'], cluster_id)
+
+    for i, node in enumerate(self.nodes):
+      dfs(i,i)
+
 
 def create_graph(data, verbose=False):
   graph = Graph()
@@ -193,7 +221,7 @@ def create_graph(data, verbose=False):
       print(
           "Nodes:%d Edges: %d" % (len(graph.nodes), len(graph.edges)),
           file=sys.stderr)
-
+  graph.finalize()
   return graph
 
 

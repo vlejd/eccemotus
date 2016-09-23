@@ -144,6 +144,7 @@ var LateralMap = (function() {
             .style('opacity', 0.5)
             .style('fill', nodeColor)
             .on('click', function(d) {
+                console.log(d);
                 if(THAT.vars.highlighted) {
                     THAT.resetOpacity();
                 } else {
